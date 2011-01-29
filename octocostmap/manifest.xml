@@ -1,0 +1,20 @@
+<package>
+  <description brief="octocostmap">
+
+     octocostmap
+
+  </description>
+  <author>Eric Perko</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/octocostmap</url>
+  <depend package="roscpp"/>
+  <depend package="octomap_server"/>
+  <depend package="sensor_msgs"/>
+  <depend package="pcl_ros" />
+  <depend package="tf" />
+  <depend package="laser_geometry" />
+
+</package>
+
+
