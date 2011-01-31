@@ -57,6 +57,15 @@ namespace octocostmap {
             ~OctoCostmap();
 
             void writeBinaryMap(const std::string& filename);
+
+            double lookupPoint(double &x, double &y, double &z) {
+                octomap::OcTreeNode *cell = octree_->search(x,y,z);
+                if (cell) {
+                  return cell->getOccupancy();
+                } else {
+                  return -1.0;
+                }
+            }
         private:
             tf::TransformListener tfl_;
             message_filters::Subscriber<sensor_msgs::LaserScan> laser_sub_;

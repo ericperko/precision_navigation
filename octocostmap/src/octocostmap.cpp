@@ -46,11 +46,11 @@ namespace octocostmap {
     tf_filter_->registerCallback(boost::bind(&OctoCostmap::laserCallback, this, _1));
 
     octree_ = new octomap::OcTree(map_resolution_);
-  
+
   }
 
   void OctoCostmap::laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
-    ros::Time start = ros::Time::now();
+    ros::WallTime start = ros::WallTime::now();
     octomap::point3d octomap_3d_point;
     octomap::Pointcloud octomap_pointcloud;
 
@@ -75,7 +75,7 @@ namespace octocostmap {
     } catch (tf::TransformException ex) {
       ROS_ERROR("Error finding origin of the laser in the map frame. Error was %s", ex.what());
     }
-    ROS_DEBUG("Laser callback took %f milliseconds", (ros::Time::now() - start).toSec() * 1000.0);
+    ROS_DEBUG("Laser callback took %f milliseconds", (ros::WallTime::now() - start).toSec() * 1000.0);
   }
 
   void OctoCostmap::writeBinaryMap(const std::string& filename) {
@@ -83,8 +83,8 @@ namespace octocostmap {
   }
 
   OctoCostmap::~OctoCostmap() {
-   delete octree_;
-   delete tf_filter_;
+    delete octree_;
+    delete tf_filter_;
   }
 };
 
@@ -94,6 +94,20 @@ int main(int argc, char *argv[]) {
   //ros::MultiThreadedSpinner spinner(4);
   //spinner.spin();
   ros::spin();
+  /*ros::WallTime start = ros::WallTime::now();
+  int counter = 0;
+  double val = 0.0;
+  for (double x = 0.0; x < 5.0; x += 0.01) {
+        for (double y = 0.0; y < 5.0; y += 0.01) {
+                for (double z = 0.0; z < 5.0; z += 0.01) {
+                        val = std::max(octocostmap.lookupPoint(x,y,z), val);
+                        counter++;
+                }
+        }
+  }
+  ROS_INFO("%f max occupancy value", val);
+  ROS_INFO("%d lookups took %f milliseconds", counter, (ros::WallTime::now() - start).toSec() * 1000.0);
+  */
   octocostmap.writeBinaryMap("octomap.bt");
   return 0;
 }
