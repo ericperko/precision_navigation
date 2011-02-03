@@ -35,18 +35,43 @@
 #include <octocostmap/octocostmap.h>
 
 #include <tf/transform_datatypes.h>
-#include <sensor_msgs/PointCloud.h>
+#include <boost/foreach.hpp>
 
 namespace octocostmap {
   OctoCostmap::OctoCostmap() : tfl_(), priv_nh_("~"), map_frame_("map"), map_resolution_(0.05) {
     priv_nh_.param("map_frame", map_frame_, map_frame_);
     priv_nh_.param("map_resolution", map_resolution_, map_resolution_);
     laser_sub_.subscribe(nh_, "scan", 100);
-    tf_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(laser_sub_, tfl_, map_frame_, 100);
-    tf_filter_->registerCallback(boost::bind(&OctoCostmap::laserCallback, this, _1));
+    pc_sub_.subscribe(nh_, "cloud", 100);
+    laser_tf_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(laser_sub_, tfl_, map_frame_, 100);
+    laser_tf_filter_->registerCallback(boost::bind(&OctoCostmap::laserCallback, this, _1));
+    pc_tf_filter_ = new tf::MessageFilter<pcl::PointCloud<pcl::PointXYZ> >(pc_sub_, tfl_, map_frame_, 100);
+    pc_tf_filter_->registerCallback(boost::bind(&OctoCostmap::pointCloudCallback, this, _1));
 
     octree_ = new octomap::OcTree(map_resolution_);
+  }
 
+  void OctoCostmap::pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud) {
+    octomap::point3d octomap_3d_point;
+    octomap::Pointcloud octomap_pointcloud;
+
+    try {
+    BOOST_FOREACH (const pcl::PointXYZ& pt, cloud->points) {
+        octomap_3d_point(0) = pt.x;
+        octomap_3d_point(1) = pt.y;
+        octomap_3d_point(2) = pt.z;
+
+        octomap_pointcloud.push_back(octomap_3d_point);
+    }
+      tf::StampedTransform transform;
+      tfl_.lookupTransform(map_frame_, cloud->header.frame_id, cloud->header.stamp, transform); 
+      octomath::Vector3 laser_point(transform.getOrigin().getX(), transform.getOrigin().getY(), transform.getOrigin().getZ());
+      octomath::Quaternion laser_quat(transform.getRotation().getW(), transform.getRotation().getX(), transform.getRotation().getY(), transform.getRotation().getZ());
+      octomath::Pose6D laser_pose(laser_point, laser_quat);
+      octree_->insertScan(octomap_pointcloud, laser_pose);
+    } catch (tf::TransformException ex) {
+      ROS_ERROR("Error finding origin of the cloud in the map frame. Error was %s", ex.what());
+    }
   }
 
   void OctoCostmap::laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
@@ -84,7 +109,8 @@ namespace octocostmap {
 
   OctoCostmap::~OctoCostmap() {
     delete octree_;
-    delete tf_filter_;
+    delete laser_tf_filter_;
+    delete pc_tf_filter_;
   }
 };
 
@@ -95,19 +121,19 @@ int main(int argc, char *argv[]) {
   //spinner.spin();
   ros::spin();
   /*ros::WallTime start = ros::WallTime::now();
-  int counter = 0;
-  double val = 0.0;
-  for (double x = 0.0; x < 5.0; x += 0.01) {
-        for (double y = 0.0; y < 5.0; y += 0.01) {
-                for (double z = 0.0; z < 5.0; z += 0.01) {
-                        val = std::max(octocostmap.lookupPoint(x,y,z), val);
-                        counter++;
-                }
-        }
-  }
-  ROS_INFO("%f max occupancy value", val);
-  ROS_INFO("%d lookups took %f milliseconds", counter, (ros::WallTime::now() - start).toSec() * 1000.0);
-  */
+    int counter = 0;
+    double val = 0.0;
+    for (double x = 0.0; x < 5.0; x += 0.01) {
+    for (double y = 0.0; y < 5.0; y += 0.01) {
+    for (double z = 0.0; z < 5.0; z += 0.01) {
+    val = std::max(octocostmap.lookupPoint(x,y,z), val);
+    counter++;
+    }
+    }
+    }
+    ROS_INFO("%f max occupancy value", val);
+    ROS_INFO("%d lookups took %f milliseconds", counter, (ros::WallTime::now() - start).toSec() * 1000.0);
+    */
   octocostmap.writeBinaryMap("octomap.bt");
   return 0;
 }

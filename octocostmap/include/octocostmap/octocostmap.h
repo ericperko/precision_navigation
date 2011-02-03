@@ -41,6 +41,8 @@
 #include <tf/message_filter.h>
 #include <sensor_msgs/LaserScan.h>
 #include <laser_geometry/laser_geometry.h>
+#include <pcl_ros/point_cloud.h>
+#include <pcl/point_types.h>
 #include <octomap/octomap.h>
 
 namespace octocostmap {
@@ -69,7 +71,9 @@ namespace octocostmap {
         private:
             tf::TransformListener tfl_;
             message_filters::Subscriber<sensor_msgs::LaserScan> laser_sub_;
-            tf::MessageFilter<sensor_msgs::LaserScan>* tf_filter_;
+            message_filters::Subscriber<pcl::PointCloud<pcl::PointXYZ> > pc_sub_;
+            tf::MessageFilter<sensor_msgs::LaserScan>* laser_tf_filter_;
+            tf::MessageFilter<pcl::PointCloud<pcl::PointXYZ> >* pc_tf_filter_;
             ros::NodeHandle nh_;
             ros::NodeHandle priv_nh_;
             std::string map_frame_;
@@ -78,6 +82,7 @@ namespace octocostmap {
             octomap::OcTree *octree_;
 
             void laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan);
+            void pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud);
     };
 };
 
