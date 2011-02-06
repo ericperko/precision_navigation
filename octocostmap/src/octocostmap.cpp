@@ -52,17 +52,20 @@ namespace octocostmap {
   }
 
   void OctoCostmap::pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud) {
+    ros::WallTime start = ros::WallTime::now();
     octomap::point3d octomap_3d_point;
     octomap::Pointcloud octomap_pointcloud;
 
     try {
-    BOOST_FOREACH (const pcl::PointXYZ& pt, cloud->points) {
-        octomap_3d_point(0) = pt.x;
-        octomap_3d_point(1) = pt.y;
-        octomap_3d_point(2) = pt.z;
+      BOOST_FOREACH (const pcl::PointXYZ& pt, cloud->points) {
+        if (pt.x == pt.x && pt.y == pt.y && pt.z == pt.z) { // checking for NaNs
+          octomap_3d_point(0) = pt.x;
+          octomap_3d_point(1) = pt.y;
+          octomap_3d_point(2) = pt.z;
 
-        octomap_pointcloud.push_back(octomap_3d_point);
-    }
+          octomap_pointcloud.push_back(octomap_3d_point);
+        }
+      }
       tf::StampedTransform transform;
       tfl_.lookupTransform(map_frame_, cloud->header.frame_id, cloud->header.stamp, transform); 
       octomath::Vector3 laser_point(transform.getOrigin().getX(), transform.getOrigin().getY(), transform.getOrigin().getZ());
@@ -72,6 +75,7 @@ namespace octocostmap {
     } catch (tf::TransformException ex) {
       ROS_ERROR("Error finding origin of the cloud in the map frame. Error was %s", ex.what());
     }
+    ROS_DEBUG("Point cloud callback took %f milliseconds for %d points", (ros::WallTime::now() - start).toSec() * 1000.0, octomap_pointcloud.size());
   }
 
   void OctoCostmap::laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
