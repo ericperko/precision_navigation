@@ -33,6 +33,8 @@
  *********************************************************************/
 
 #include <octocostmap/octocostmap.h>
+#include <octomap_server/octomap_server.h>
+#include <octomap_server/OctomapBinary.h>
 
 #include <tf/transform_datatypes.h>
 #include <boost/foreach.hpp>
@@ -47,6 +49,8 @@ namespace octocostmap {
     laser_tf_filter_->registerCallback(boost::bind(&OctoCostmap::laserCallback, this, _1));
     pc_tf_filter_ = new tf::MessageFilter<pcl::PointCloud<pcl::PointXYZ> >(pc_sub_, tfl_, map_frame_, 100);
     pc_tf_filter_->registerCallback(boost::bind(&OctoCostmap::pointCloudCallback, this, _1));
+
+    map_pub_ = nh_.advertise<octomap_server::OctomapBinary>("octomap", 1, true);
 
     octree_ = new octomap::OcTree(map_resolution_);
   }
@@ -76,6 +80,7 @@ namespace octocostmap {
       ROS_ERROR("Error finding origin of the cloud in the map frame. Error was %s", ex.what());
     }
     ROS_DEBUG("Point cloud callback took %f milliseconds for %d points", (ros::WallTime::now() - start).toSec() * 1000.0, octomap_pointcloud.size());
+    publishOctomapMsg();
   }
 
   void OctoCostmap::laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
@@ -105,6 +110,17 @@ namespace octocostmap {
       ROS_ERROR("Error finding origin of the laser in the map frame. Error was %s", ex.what());
     }
     ROS_DEBUG("Laser callback took %f milliseconds", (ros::WallTime::now() - start).toSec() * 1000.0);
+    publishOctomapMsg();
+  }
+
+  void OctoCostmap::publishOctomapMsg() {
+    if (map_pub_.getNumSubscribers() > 0) {
+      octomap_server::OctomapBinary::Ptr map_ptr = boost::make_shared<octomap_server::OctomapBinary>();
+      octomap_server::octomapMapToMsg(*octree_, *map_ptr);
+      map_ptr->header.frame_id = map_frame_;
+      map_pub_.publish(map_ptr);
+      ROS_DEBUG("Published an octocostmap");
+    }
   }
 
   void OctoCostmap::writeBinaryMap(const std::string& filename) {

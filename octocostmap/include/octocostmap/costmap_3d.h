@@ -32,61 +32,37 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#ifndef OCTOCOSTMAP_H_
-#define OCTOCOSTMAP_H_
+#ifndef COSTMAP_3D_H_
+#define COSTMAP_3D_H_
 
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
-#include <message_filters/subscriber.h>
-#include <tf/message_filter.h>
-#include <sensor_msgs/LaserScan.h>
-#include <laser_geometry/laser_geometry.h>
-#include <pcl_ros/point_cloud.h>
-#include <pcl/point_types.h>
 #include <octomap/octomap.h>
+#include <octomap_server/OctomapBinary.h>
+#include <geometry_msgs/PointStamped.h>
+#include <boost/thread/shared_mutex.hpp>
+#include <vector>
 
 namespace octocostmap {
-    class OctoCostmap {
-        public:
-            /**
-              * @brief Constructor
-              */
-            OctoCostmap();
+        class Costmap3D {
+            public:
+                Costmap3D(const std::string &name, tf::TransformListener &tfl);
 
-            /**
-              * @brief Destructor
-              */
-            ~OctoCostmap();
+                void octomapCallback(const octomap_server::OctomapBinary::ConstPtr& map);
 
-            void writeBinaryMap(const std::string& filename);
+                bool checkCollisionVolume(const std::vector<geometry_msgs::PointStamped> &collision_volume);
 
-            double lookupPoint(double &x, double &y, double &z) {
-                octomap::OcTreeNode *cell = octree_->search(x,y,z);
-                if (cell) {
-                  return cell->getOccupancy();
-                } else {
-                  return -1.0;
-                }
-            }
-
-            void publishOctomapMsg();
-        private:
-            tf::TransformListener tfl_;
-            message_filters::Subscriber<sensor_msgs::LaserScan> laser_sub_;
-            message_filters::Subscriber<pcl::PointCloud<pcl::PointXYZ> > pc_sub_;
-            ros::Publisher map_pub_;
-            tf::MessageFilter<sensor_msgs::LaserScan>* laser_tf_filter_;
-            tf::MessageFilter<pcl::PointCloud<pcl::PointXYZ> >* pc_tf_filter_;
-            ros::NodeHandle nh_;
-            ros::NodeHandle priv_nh_;
-            std::string map_frame_;
-            double map_resolution_;
-            laser_geometry::LaserProjection projector_;
-            octomap::OcTree *octree_;
-
-            void laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan);
-            void pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud);
-    };
+                bool checkRectangularPrismBase(const geometry_msgs::PointStamped origin, double width, double height, double length, double resolution);
+            private:
+                std::string name_;
+                std::string map_frame_;
+                tf::TransformListener& tfl_;
+                ros::NodeHandle nh_;
+                ros::NodeHandle priv_nh_;
+                ros::Subscriber octomap_sub_;
+                octomap::OcTree octree_;
+                boost::shared_mutex octree_lock_;
+        };
 };
 
 #endif
