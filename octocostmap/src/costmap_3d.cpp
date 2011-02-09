@@ -38,7 +38,7 @@
 
 namespace octocostmap {
   Costmap3D::Costmap3D(const std::string &name, tf::TransformListener &tfl):
-    name_(name), tfl_(tfl), nh_(), priv_nh_("~/" + name_), octree_(0.5) {
+    name_(name), tfl_(tfl), nh_(), priv_nh_("~/" + name_), octree_(0.5), map_frame_("map") {
       octomap_sub_ = nh_.subscribe<octomap_server::OctomapBinary>("octomap", 1, boost::bind(&Costmap3D::octomapCallback, this, _1));
     }
 
@@ -51,25 +51,26 @@ namespace octocostmap {
     }
   }
 
-  bool Costmap3D::checkRectangularPrismBase(const geometry_msgs::PointStamped origin, double width, double height, double length, double resolution) {
-    std::vector<geometry_msgs::PointStamped> pts;
+  bool Costmap3D::checkRectangularPrismBase(const geometry_msgs::PointStamped &origin, double width, double height, double length, double resolution) {
+    std::vector<geometry_msgs::PointStamped> collision_pts;
     geometry_msgs::PointStamped temp = origin;
     double num_pts = width * height * length / (resolution * resolution * resolution);
-    pts.reserve( (size_t) (num_pts + 1));
+    collision_pts.reserve( (size_t) (num_pts + 1));
     for (double dx = 0.0; dx < length; dx += resolution) {
       for (double dy = 0.0; dy < width; dy += resolution) {
         for (double dz = 0.0; dz < height; dz += resolution) {
           temp.point.x = origin.point.x + dx;
           temp.point.y = origin.point.y + dy;
           temp.point.z = origin.point.z + dz;
-          pts.push_back(temp);
+          collision_pts.push_back(temp);
         }
       }
     }
-    return checkCollisionVolume(pts);
+    return checkCollisionVolume(collision_pts);
   }
 
   bool Costmap3D::checkCollisionVolume(const std::vector<geometry_msgs::PointStamped> &collision_volume) {
+    uint32_t num_points_checked = 0;
     bool retval = false;
     geometry_msgs::PointStamped temp;
     octomap::OcTreeNode *current_cell;
@@ -78,15 +79,22 @@ namespace octocostmap {
       try {
         tfl_.transformPoint(map_frame_, pt, temp);
         current_cell = octree_.search(temp.point.x, temp.point.y, temp.point.z);
-        if (current_cell->isOccupied()) {
-          retval = true;
-          break;
+        num_points_checked++;
+        if(current_cell) {
+          if (current_cell->isOccupied()) {
+            retval = true;
+            break;
+          }
         }
       } catch (tf::TransformException ex) {
         ROS_ERROR("%s", ex.what());
+        //Err on the side of caution if we can't transform a point
+        retval = true;
+        break;
       }
     }
     octree_lock_.unlock_shared();
+    ROS_DEBUG("Checked %d out of %d points before breaking out", num_points_checked, collision_volume.size());
     return retval;
   }
 };

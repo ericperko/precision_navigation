@@ -52,7 +52,7 @@ namespace octocostmap {
 
                 bool checkCollisionVolume(const std::vector<geometry_msgs::PointStamped> &collision_volume);
 
-                bool checkRectangularPrismBase(const geometry_msgs::PointStamped origin, double width, double height, double length, double resolution);
+                bool checkRectangularPrismBase(const geometry_msgs::PointStamped &origin, double width, double height, double length, double resolution);
             private:
                 std::string name_;
                 std::string map_frame_;
