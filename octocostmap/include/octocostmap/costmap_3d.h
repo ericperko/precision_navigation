@@ -39,7 +39,7 @@
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
 #include <octomap/octomap.h>
-#include <octomap_server/OctomapBinary.h>
+#include <octomap_ros/OctomapBinary.h>
 #include <geometry_msgs/PointStamped.h>
 #include <boost/thread/shared_mutex.hpp>
 #include <vector>
@@ -49,7 +49,7 @@ namespace octocostmap {
             public:
                 Costmap3D(const std::string &name, tf::TransformListener &tfl);
 
-                void octomapCallback(const octomap_server::OctomapBinary::ConstPtr& map);
+                void octomapCallback(const octomap_ros::OctomapBinary::ConstPtr& map);
 
                 bool checkCollisionVolume(const std::vector<tf::Point > &collision_volume);
 

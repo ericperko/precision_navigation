@@ -9,7 +9,7 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/octocostmap</url>
   <depend package="roscpp"/>
-  <depend package="octomap_server"/>
+  <depend package="octomap_ros"/>
   <depend package="sensor_msgs"/>
   <depend package="pcl_ros" />
   <depend package="tf" />

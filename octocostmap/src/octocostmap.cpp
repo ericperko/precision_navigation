@@ -33,8 +33,8 @@
  *********************************************************************/
 
 #include <octocostmap/octocostmap.h>
-#include <octomap_server/octomap_server.h>
-#include <octomap_server/OctomapBinary.h>
+#include <octomap_ros/conversions.h>
+#include <octomap_ros/OctomapBinary.h>
 
 #include <tf/transform_datatypes.h>
 #include <boost/foreach.hpp>
@@ -50,7 +50,7 @@ namespace octocostmap {
     pc_tf_filter_ = new tf::MessageFilter<pcl::PointCloud<pcl::PointXYZ> >(pc_sub_, tfl_, map_frame_, 100);
     pc_tf_filter_->registerCallback(boost::bind(&OctoCostmap::pointCloudCallback, this, _1));
 
-    map_pub_ = nh_.advertise<octomap_server::OctomapBinary>("octomap", 1, true);
+    map_pub_ = nh_.advertise<octomap_ros::OctomapBinary>("octomap", 1, true);
 
     octree_ = new octomap::OcTree(map_resolution_);
   }
@@ -115,8 +115,8 @@ namespace octocostmap {
 
   void OctoCostmap::publishOctomapMsg() {
     if (map_pub_.getNumSubscribers() > 0) {
-      octomap_server::OctomapBinary::Ptr map_ptr = boost::make_shared<octomap_server::OctomapBinary>();
-      octomap_server::octomapMapToMsg(*octree_, *map_ptr);
+      octomap_ros::OctomapBinary::Ptr map_ptr = boost::make_shared<octomap_ros::OctomapBinary>();
+      octomap::octomapMapToMsg(*octree_, *map_ptr);
       map_ptr->header.frame_id = map_frame_;
       map_pub_.publish(map_ptr);
       ROS_DEBUG("Published an octocostmap");
