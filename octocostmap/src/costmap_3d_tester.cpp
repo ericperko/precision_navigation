@@ -32,39 +32,38 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#ifndef COSTMAP_3D_H_
-#define COSTMAP_3D_H_
-
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
-#include <tf/transform_datatypes.h>
-#include <octomap/octomap.h>
-#include <octomap_server/OctomapBinary.h>
 #include <geometry_msgs/PointStamped.h>
-#include <boost/thread/shared_mutex.hpp>
-#include <vector>
+#include <octocostmap/costmap_3d.h>
 
-namespace octocostmap {
-        class Costmap3D {
-            public:
-                Costmap3D(const std::string &name, tf::TransformListener &tfl);
+void timerCallback(octocostmap::Costmap3D *costmap, const ros::TimerEvent& event) {
+  ROS_DEBUG("Last callback took %f seconds", event.profile.last_duration.toSec());
+  geometry_msgs::PointStamped origin;
+  origin.header.frame_id = "base_link";
+  origin.header.stamp = ros::Time::now();
+  origin.point.x = -0.711;
+  origin.point.y = -0.3048;
+  origin.point.z = 0.0;
+  double width = 0.6096;
+  double length = 1.422;
+  double height = 2.00;
+  double resolution = 0.05;
 
-                void octomapCallback(const octomap_server::OctomapBinary::ConstPtr& map);
+  if (costmap->checkRectangularPrismBase(origin, width, height, length, resolution)) {
+        ROS_DEBUG("collision detected");
+  }
+}
 
-                bool checkCollisionVolume(const std::vector<tf::Point > &collision_volume);
+int main(int argc, char *argv[]) {
+  ros::init(argc,argv, "costmap_3d_tester");
+  ros::NodeHandle nh;
+  tf::TransformListener tfl;
+  octocostmap::Costmap3D costmap("costmap", tfl);
 
-                bool checkRectangularPrismBase(const geometry_msgs::PointStamped &origin, double width, double height, double length, double resolution);
-            private:
-                std::string name_;
-                std::string map_frame_;
-                tf::TransformListener& tfl_;
-                ros::NodeHandle nh_;
-                ros::NodeHandle priv_nh_;
-                ros::Subscriber octomap_sub_;
-                ros::Publisher collision_volume_pub_;
-                octomap::OcTree octree_;
-                boost::shared_mutex octree_lock_;
-        };
-};
+  ros::Timer timer = nh.createTimer(ros::Duration(0.1), boost::bind(timerCallback, &costmap, _1));
 
-#endif
+  ros::MultiThreadedSpinner spinner(4); // Use 4 threads
+  spinner.spin(); // spin() will not return until the node has been shutdown
+  return 0;
+}
