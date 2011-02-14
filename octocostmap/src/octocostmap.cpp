@@ -43,6 +43,13 @@ namespace octocostmap {
   OctoCostmap::OctoCostmap() : tfl_(), priv_nh_("~"), map_frame_("map"), map_resolution_(0.05) {
     priv_nh_.param("map_frame", map_frame_, map_frame_);
     priv_nh_.param("map_resolution", map_resolution_, map_resolution_);
+    double publish_frequency = 0.0;
+    priv_nh_.param("publish_frequency", publish_frequency, 10.0);
+    if (publish_frequency > 0.0) {
+      publish_period_ = ros::Duration(1/publish_frequency);
+    } else {
+      publish_period_ = ros::Duration(0.0);
+    }
     laser_sub_.subscribe(nh_, "scan", 100);
     pc_sub_.subscribe(nh_, "cloud", 100);
     laser_tf_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(laser_sub_, tfl_, map_frame_, 100);
@@ -115,11 +122,14 @@ namespace octocostmap {
 
   void OctoCostmap::publishOctomapMsg() {
     if (map_pub_.getNumSubscribers() > 0) {
-      octomap_ros::OctomapBinary::Ptr map_ptr = boost::make_shared<octomap_ros::OctomapBinary>();
-      octomap::octomapMapToMsg(*octree_, *map_ptr);
-      map_ptr->header.frame_id = map_frame_;
-      map_pub_.publish(map_ptr);
-      ROS_DEBUG("Published an octocostmap");
+      if (last_sent_time_ + publish_period_ < ros::Time::now()) {
+        octomap_ros::OctomapBinary::Ptr map_ptr = boost::make_shared<octomap_ros::OctomapBinary>();
+        octomap::octomapMapToMsg(*octree_, *map_ptr);
+        map_ptr->header.frame_id = map_frame_;
+        map_pub_.publish(map_ptr);
+        last_sent_time_ = ros::Time::now();
+        ROS_DEBUG("Published an octocostmap");
+      }
     }
   }
 

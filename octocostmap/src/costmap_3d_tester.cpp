@@ -50,7 +50,7 @@ void timerCallback(octocostmap::Costmap3D *costmap, const ros::TimerEvent& event
   double height = 2.00;
   double resolution = 0.05;
 
-  if (costmap->checkRectangularPrismBase(origin, width, height, length, resolution)) {
+  if (costmap->checkRectangularPrismBase(origin, width, height, length, resolution, false)) {
         ROS_DEBUG("collision detected");
   }
 }

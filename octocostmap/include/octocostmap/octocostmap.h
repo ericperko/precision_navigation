@@ -83,6 +83,8 @@ namespace octocostmap {
             double map_resolution_;
             laser_geometry::LaserProjection projector_;
             octomap::OcTree *octree_;
+            ros::Time last_sent_time_;
+            ros::Duration publish_period_;
 
             void laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan);
             void pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud);

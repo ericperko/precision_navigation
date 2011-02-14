@@ -54,7 +54,7 @@ namespace octocostmap {
     }
   }
 
-  bool Costmap3D::checkRectangularPrismBase(const geometry_msgs::PointStamped &origin, double width, double height, double length, double resolution) {
+  bool Costmap3D::checkRectangularPrismBase(const geometry_msgs::PointStamped &origin, double width, double height, double length, double resolution, bool check_full_volume) {
     std::vector<tf::Point > collision_pts;
     tf::Stamped<tf::Point > temp_origin;
     tf::pointStampedMsgToTF(origin, temp_origin);
@@ -72,15 +72,45 @@ namespace octocostmap {
       double x_resolution = resolution/length;
       double y_resolution = resolution/width;
       double z_resolution = resolution/height;
-      for (double dx = 0.0; dx <= 1.0; dx += x_resolution) {
+      if (check_full_volume) {
+        for (double dx = 0.0; dx <= 1.0; dx += x_resolution) {
+          for (double dy = 0.0; dy <= 1.0; dy += y_resolution) {
+            for (double dz = 0.0; dz <= 1.0; dz += z_resolution) {
+              /*temp.setX(temp_origin.x() + dx);
+                temp.setY(temp_origin.y() + dy);
+                temp.setZ(temp_origin.z() + dz);
+                */
+              temp = origin_pt + dx*x_vec + dy*y_vec + dz*z_vec;
+              collision_pts.push_back(temp);
+            }
+          }
+        }
+      } else {
+        //Generate left and right sides
+        for (double dx = 0.0; dx <= 1.0; dx += x_resolution) {
+          for (double dz = 0.0; dz <=1.0; dz += z_resolution) {
+                temp = origin_pt + dx*x_vec + dz*z_vec;
+                collision_pts.push_back(temp);
+                temp = origin_pt + dx*x_vec + dz*z_vec + y_vec;
+                collision_pts.push_back(temp);
+          }
+        }
+        //Generate the front and back sides
         for (double dy = 0.0; dy <= 1.0; dy += y_resolution) {
-          for (double dz = 0.0; dz <= 1.0; dz += z_resolution) {
-            /*temp.setX(temp_origin.x() + dx);
-            temp.setY(temp_origin.y() + dy);
-            temp.setZ(temp_origin.z() + dz);
-            */
-            temp = origin_pt + dx*x_vec + dy*y_vec + dz*z_vec;
-            collision_pts.push_back(temp);
+          for (double dz = 0.0; dz < 1.0; dz += z_resolution) {
+                temp = origin_pt + dy*y_vec + dz*z_vec;
+                collision_pts.push_back(temp);
+                temp = origin_pt + dy*y_vec + dz*z_vec + x_vec;
+                collision_pts.push_back(temp);
+          }
+        }
+        //Generate the top and bottom sides
+        for (double dx = 0.0; dx <= 1.0; dx += x_resolution) {
+          for (double dy = 0.0; dy < 1.0; dy += y_resolution) {
+                temp = origin_pt + dx*x_vec + dy*y_vec;
+                collision_pts.push_back(temp);
+                temp = origin_pt + dx*x_vec + dy*y_vec + y_vec;
+                collision_pts.push_back(temp);
           }
         }
       }
