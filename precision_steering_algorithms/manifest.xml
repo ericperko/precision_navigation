@@ -1,0 +1,23 @@
+<package>
+  <description brief="precision_steering_algorithms">
+
+     precision_steering_algorithms
+
+  </description>
+  <author>Eric Perko</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/precision_steering_algorithms</url>
+  <depend package="precision_steering"/>
+  <depend package="precision_navigation_msgs"/>
+  <depend package="roscpp"/>
+  <depend package="pluginlib" />
+
+  <export>
+	  <cpp cflags="-I${prefix}/include" lflags="-Wl,-rpath,${prefix}/lib -L${prefix}/lib -lsecond_order_steering" />
+	  <precision_steering plugin="${prefix}/steering_plugins.xml" />
+  </export>
+
+</package>
+
+

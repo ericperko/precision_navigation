@@ -1,0 +1,10 @@
+<library path="lib/libsecond_order_steering">
+	<class name="precision_steering_algorithms/SecondOrderSteering" type="second_order_steering::SecondOrderSteering" base_class_type="precision_steering::SteeringBase">
+		<description>Second Order Steering</description>
+	</class>
+</library>
+<library path="lib/libphase_space_steering">
+	<class name="precision_steering_algorithms/PhaseSpaceSteering" type="phase_space_steering::PhaseSpaceSteering" base_class_type="precision_steering::SteeringBase">
+		<description>Phase Space Steering</description>
+	</class>
+</library>
