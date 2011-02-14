@@ -1,0 +1,16 @@
+<package>
+  <description brief="precision_navigation_msgs">
+
+     precision_navigation_msgs
+
+  </description>
+  <author>Eric Perko</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/precision_navigation_msgs</url>
+  <depend package="actionlib_msgs"/>
+  <depend package="std_msgs"/>
+
+</package>
+
+
