@@ -14,8 +14,6 @@
   <depend package="geometry_msgs"/>
   <depend package="precision_navigation_msgs"/>
   <depend package="roscpp"/>
-  <depend package="base_local_planner" />
-  <depend package="costmap_2d" />
   <depend package="pluginlib" />
 
   <export>

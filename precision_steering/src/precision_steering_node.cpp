@@ -4,9 +4,6 @@
 #include <tf/transform_datatypes.h>
 #include <cmath>
 #include <precision_navigation_msgs/DesiredState.h>
-#include <tf/transform_listener.h>
-#include <costmap_2d/costmap_2d_ros.h>
-#include <base_local_planner/trajectory_planner_ros.h>
 #include <pluginlib/class_loader.h>
 #include <precision_steering/steering_base.h>
 #include <string>
@@ -23,9 +20,6 @@ class PrecisionSteering {
 		//last updated Odometry information
 		nav_msgs::Odometry current_odom;
 		precision_navigation_msgs::DesiredState curDesState;
-		tf::TransformListener tf_;
-		costmap_2d::Costmap2DROS *local_costmap_;
-		base_local_planner::TrajectoryPlannerROS planner_;
 
 		//Loop rate in Hz
 		double loop_rate;
@@ -46,9 +40,7 @@ class PrecisionSteering {
 
 PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 	//Read parameters from the ROS parameter server, defaulting to value if the parameter is not there
-	bool use_collision_avoidance;
 	priv_nh_.param("loop_rate", loop_rate, 20.0);
-	priv_nh_.param("use_collision_avoidance", use_collision_avoidance, true);
 	std::string steering_algo_name;
 	priv_nh_.param("steering_algorithm", steering_algo_name, std::string("precision_steering_algorithms/SecondOrderSteering"));
 
@@ -63,15 +55,6 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 	} catch(pluginlib::PluginlibException& ex) {
 		ROS_ERROR("Failed to create the steering algorithm due to a plugin loading error. Error: %s", ex.what());
 		exit(0);
-	}
-
-	if(use_collision_avoidance) {
-		//Setup the costmap
-		local_costmap_ = new costmap_2d::Costmap2DROS("local_costmap", tf_);	
-		//Initialize the trajectory planner we will use for collision checking
-		planner_.initialize("TrajectoryPlannerROS", &tf_, local_costmap_);
-	} else {
-		ROS_WARN("Collision avoidance behaviors currently disabled. The steering may issue unsafe commands");
 	}
 
 	firstCall=true;
@@ -114,22 +97,6 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 
 			steering_algo->computeVelocities(x_PSO,y_PSO,psi_PSO,x_Des,y_Des,v_Des,psi_Des,rho_Des,v,omega);   
 
-			if(use_collision_avoidance) {
-				ROS_DEBUG("Using collsion avoidance behaviors");
-				//check the computed velocities for safety
-				if(planner_.checkTrajectory(v, 0.0, omega, true)) {
-					//Legal trajectory, so we can use those values as is
-					ROS_DEBUG("Legal trajectory computed... allowing v = %f, omega = %f", v, omega);
-				} else {
-					//Trajectory is unsafe... halt
-					ROS_WARN("Unsafe speeds computed... this would have caused a collision: v = %f, omega = %f", v, omega);
-					v = 0.0;
-					omega = 0.0;
-				}
-			} else {
-				ROS_DEBUG("Not using collision avoidance behaviors");
-			}
-
 			//Put values into twist message
 			twist.linear.x = v;
 			twist.angular.z = omega;
@@ -166,9 +133,6 @@ void PrecisionSteering::desStateCallback(const precision_navigation_msgs::Desire
 }
 
 PrecisionSteering::~PrecisionSteering() {
-	if(local_costmap_ != NULL) {
-		delete local_costmap_;
-	}
 }
 
 int main(int argc, char *argv[]) {
