@@ -7,394 +7,299 @@
 #include <precision_navigation_msgs/DesiredState.h>
 #include <precision_navigation_msgs/PathSegment.h>
 #include <precision_navigation_msgs/Path.h>
+#include <octocostmap/costmap_3d.h>
 #include <vector>
 #include <cmath>
 #include <algorithm>
 
 class IdealStateGenerator {
-	public:
-		IdealStateGenerator();
-	private:
-		void computeState(float& x, float& y, float& theta, float& v, float& rho);
-		void pathCallback(const precision_navigation_msgs::Path::ConstPtr& p);
-		void cmdVelCallback(const geometry_msgs::Twist::ConstPtr& cmd_vel);
-		void odomCallback(const nav_msgs::Odometry::ConstPtr& odom);
-		void initializeDummyPath();
-		precision_navigation_msgs::DesiredState makeHaltState();
+  public:
+    IdealStateGenerator();
+  private:
+    void computeState(float& x, float& y, float& theta, float& v, float& rho);
+    void pathCallback(const precision_navigation_msgs::Path::ConstPtr& p);
+    void cmdVelCallback(const geometry_msgs::Twist::ConstPtr& cmd_vel);
+    void odomCallback(const nav_msgs::Odometry::ConstPtr& odom);
+    precision_navigation_msgs::DesiredState makeHaltState();
+    void computeStateLoop(const ros::TimerEvent& event);
+    bool checkCollisions(bool checkEntireVolume);
 
-		//Loop rate in Hz
-		double loop_rate;
-		double dt;
-		bool halt;
+    //Loop rate in Hz
+    double loop_rate;
+    double dt;
+    bool halt;
 
-		double segDistDone;
-		uint32_t iSeg;
+    double segDistDone;
+    uint32_t iSeg;
 
-		//Current path to be working on
-		std::vector<precision_navigation_msgs::PathSegment> path;
-		//Last cmd_vel
-		geometry_msgs::Twist last_cmd_;
-		//Last odometry
-		nav_msgs::Odometry last_odom_;
-		//Is the odometry ready?
-		bool first_call_;
-		
-		//The last desired state we output	
-		precision_navigation_msgs::DesiredState desiredState_;
+    //Current path to be working on
+    std::vector<precision_navigation_msgs::PathSegment> path;
+    //Last cmd_vel
+    geometry_msgs::Twist last_cmd_;
+    //Last odometry
+    nav_msgs::Odometry last_odom_;
+    //Is the odometry ready?
+    bool first_call_;
 
-		//ROS communcators
-		ros::NodeHandle nh_;
-		ros::Publisher ideal_state_pub_;
-		ros::Subscriber path_sub_;
-		ros::Subscriber cmd_vel_sub_;
-		ros::Subscriber odom_sub_;
-		tf::TransformListener tf_listener_;	
-		geometry_msgs::PoseStamped temp_pose_in_, temp_pose_out_;
+    //The last desired state we output	
+    precision_navigation_msgs::DesiredState desiredState_;
+
+    //ROS communcators
+    ros::NodeHandle nh_;
+    ros::Publisher ideal_state_pub_;
+    ros::Subscriber path_sub_;
+    ros::Subscriber cmd_vel_sub_;
+    ros::Subscriber odom_sub_;
+    tf::TransformListener tf_listener_;	
+    geometry_msgs::PoseStamped temp_pose_in_, temp_pose_out_;
+    octocostmap::Costmap3D *costmap_;
+    ros::Timer compute_loop_timer_;
 };
 
 const double pi = acos(-1.0);
 
 IdealStateGenerator::IdealStateGenerator() {
-	//Setup the ideal state pub
-	ideal_state_pub_= nh_.advertise<precision_navigation_msgs::DesiredState>("idealState",1);   
-	path_sub_ = nh_.subscribe<precision_navigation_msgs::Path>("desired_path", 1, &IdealStateGenerator::pathCallback, this);
-	cmd_vel_sub_ = nh_.subscribe<geometry_msgs::Twist>("cmd_vel", 1, &IdealStateGenerator::cmdVelCallback, this);
-	odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, &IdealStateGenerator::odomCallback, this);
-	nh_.param("loop_rate",loop_rate,20.0); // default 20Hz
-	dt = 1.0/loop_rate;
+  //Setup the ideal state pub
+  ideal_state_pub_= nh_.advertise<precision_navigation_msgs::DesiredState>("idealState",1);   
+  path_sub_ = nh_.subscribe<precision_navigation_msgs::Path>("desired_path", 1, &IdealStateGenerator::pathCallback, this);
+  cmd_vel_sub_ = nh_.subscribe<geometry_msgs::Twist>("cmd_vel", 1, &IdealStateGenerator::cmdVelCallback, this);
+  odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, &IdealStateGenerator::odomCallback, this);
+  nh_.param("loop_rate",loop_rate,20.0); // default 20Hz
+  dt = 1.0/loop_rate;
+  costmap_ = new octocostmap::Costmap3D("octocostmap", tf_listener_);
 
-	first_call_ = true;
+  first_call_ = true;
 
-	//Setup the rate limiter
-	ros::Rate rate(loop_rate);
+  //Setup the loop timer
+  compute_loop_timer_ = nh_.createTimer(ros::Duration(dt), boost::bind(&IdealStateGenerator::computeStateLoop, this, _1));
 
-	//Sets up a dummy path until we get something smarter to send it down and set it
-	//initializeDummyPath();
-
-	//Initialze private class variables
-	iSeg = 0;
-	segDistDone = 0.0;
-	halt = true;
-
-	//temps
-	float x = 0.0;
-	float y = 0.0;
-	float theta = 0.0;
-	float v = 0.0;
-	float rho = 0.0;
-
-	tf_listener_.waitForTransform("odom", "map", ros::Time::now(), ros::Duration(10));
-	//Don't shutdown till the node shuts down
-	while(ros::ok()) {
-		if(!first_call_) {
-			//Orientation is a quaternion, so need to get yaw angle in rads.. unless you want a quaternion
-			theta = tf::getYaw(last_odom_.pose.pose.orientation);
-			v = last_cmd_.linear.x;
-			computeState(x,y,theta,v,rho);
-
-			//Put the temp vars into the desiredState
-			desiredState_.header.stamp = ros::Time::now();
-			if(halt) {
-				desiredState_ = makeHaltState();
-			}
-			else {
-				desiredState_.x = x;
-				desiredState_.y = y;
-				desiredState_.theta = theta;
-				desiredState_.v = v;
-				desiredState_.rho = rho;
-			}
-			//Publish twist message
-			ideal_state_pub_.publish(desiredState_);
-		}
-		//Make sure this node's ROS stuff gets to run if we are hogging CPU
-		ros::spinOnce();
+  //Initialze private class variables
+  iSeg = 0;
+  segDistDone = 0.0;
+  halt = true;
 
 
-		//Sleep till it's time to go again
-		rate.sleep();
-	}
+  tf_listener_.waitForTransform("odom", "map", ros::Time::now(), ros::Duration(10));
+  desiredState_ = makeHaltState();
 }
 
 //We want to take the current location of the base and set that as the desired state with 0 velocity and rho. 
 precision_navigation_msgs::DesiredState IdealStateGenerator::makeHaltState() {
-	//Convert into the odometry frame from whatever frame the path segments are in
-	temp_pose_in_.header.frame_id = "base_link";
-	temp_pose_in_.pose.position.x = 0.0;
-	temp_pose_in_.pose.position.y = 0.0;
-	temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
-	ros::Time current_transform = ros::Time::now();
-	tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
-	temp_pose_in_.header.stamp = current_transform;
-	tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
+  //Convert into the odometry frame from whatever frame the path segments are in
+  temp_pose_in_.header.frame_id = "base_link";
+  temp_pose_in_.pose.position.x = 0.0;
+  temp_pose_in_.pose.position.y = 0.0;
+  temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
+  ros::Time current_transform = ros::Time::now();
+  tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
+  temp_pose_in_.header.stamp = current_transform;
+  tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
 
-	double tanAngle = tf::getYaw(temp_pose_out_.pose.orientation);
-	precision_navigation_msgs::DesiredState halt_state;
-	halt_state.header.stamp = ros::Time::now();
-	halt_state.x = temp_pose_out_.pose.position.x;
-	halt_state.y = temp_pose_out_.pose.position.y;
-	halt_state.theta = tanAngle;
-	halt_state.v = 0.0;
-	halt_state.rho = 0.0;
-	return halt_state;
+  double tanAngle = tf::getYaw(temp_pose_out_.pose.orientation);
+  precision_navigation_msgs::DesiredState halt_state;
+  halt_state.header.frame_id = "odom";
+  halt_state.header.stamp = ros::Time::now();
+  halt_state.x = temp_pose_out_.pose.position.x;
+  halt_state.y = temp_pose_out_.pose.position.y;
+  halt_state.theta = tanAngle;
+  halt_state.v = 0.0;
+  halt_state.rho = 0.0;
+  return halt_state;
 
+}
+
+void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
+  ROS_DEBUG("Last callback took %f seconds", event.profile.last_duration.toSec());
+  //temps
+  float x = 0.0;
+  float y = 0.0;
+  float theta = 0.0;
+  float v = 0.0;
+  float rho = 0.0;
+
+  if(!first_call_) {
+    //Orientation is a quaternion, so need to get yaw angle in rads.. unless you want a quaternion
+    theta = tf::getYaw(last_odom_.pose.pose.orientation);
+    v = last_cmd_.linear.x;
+    computeState(x,y,theta,v,rho);
+
+    //Put the temp vars into the desiredState
+    desiredState_.header.frame_id = "odom";
+    desiredState_.header.stamp = ros::Time::now();
+    if(halt) {
+      desiredState_ = makeHaltState();
+    }
+    else {
+      desiredState_.x = x;
+      desiredState_.y = y;
+      desiredState_.theta = theta;
+      desiredState_.v = v;
+      desiredState_.rho = rho;
+    }
+    if(checkCollisions(false)) {
+      desiredState_ = makeHaltState();
+    }
+    //Publish twist message
+    ideal_state_pub_.publish(desiredState_);
+  }
+}
+
+bool IdealStateGenerator::checkCollisions(bool checkEntireVolume) {
+  geometry_msgs::PointStamped origin, origin_des_frame;
+  origin_des_frame.header = desiredState_.header;
+  origin_des_frame.point.x = desiredState_.x;
+  origin_des_frame.point.x = desiredState_.y;
+  origin_des_frame.point.z = 0.0;
+  try {
+    tf_listener_.transformPoint("base_link", origin_des_frame, origin);
+    origin.point.x += -0.711;
+    origin.point.y += -0.3048;
+    origin.point.z += 0.0;
+    double width = 0.6096;
+    double length = 1.422;
+    double height = 2.00;
+    double resolution = 0.05;
+    bool collision_detected = costmap_->checkRectangularPrismBase(origin, width, height, length, resolution, checkEntireVolume);
+    if (collision_detected) {
+      ROS_WARN("collision_detected");
+      return true;
+    } else {
+      return false;
+    }
+  } catch (tf::TransformException ex) {
+    ROS_ERROR("%s", ex.what());
+    return true;
+  }
 }
 
 void IdealStateGenerator::computeState(float& x, float& y, float& theta, float& v, float& rho)
 {
-	double dL = v * dt;
-	if(iSeg >= path.size()) {
-		//Out of bounds
-		halt = true;
-		v = 0.0;
-		return;
-	}
+  double dL = v * dt;
+  if(iSeg >= path.size()) {
+    //Out of bounds
+    halt = true;
+    v = 0.0;
+    return;
+  }
 
-	//Need to only advance by the projection of what we did onto the desired heading	
-	// formula is v * dt * cos(psiDes - psiPSO)
-	segDistDone = segDistDone + dL * cos(desiredState_.theta - theta);
-	double lengthSeg = path.at(iSeg).length;
-	if(segDistDone > lengthSeg) {
-		segDistDone = 0.0;
-		iSeg++;
-	}
+  //Need to only advance by the projection of what we did onto the desired heading	
+  // formula is v * dt * cos(psiDes - psiPSO)
+  segDistDone = segDistDone + dL * cos(desiredState_.theta - theta);
+  double lengthSeg = path.at(iSeg).length;
+  if(segDistDone > lengthSeg) {
+    segDistDone = 0.0;
+    iSeg++;
+  }
 
-	if(iSeg >= path.size()) {
-		//Out of bounds
-		halt = true;
-		v = 0.0;
-		return;
-	}
+  if(iSeg >= path.size()) {
+    //Out of bounds
+    halt = true;
+    v = 0.0;
+    return;
+  }
 
-	precision_navigation_msgs::PathSegment currentSeg = path.at(iSeg);
+  precision_navigation_msgs::PathSegment currentSeg = path.at(iSeg);
 
-	double vNext;
-	v = currentSeg.vDes;
-	if (iSeg < path.size()-1) {
-		vNext = path.at(iSeg+1).vDes;
-	} 
-	else {
-		vNext = 0.0;	
-	}
+  double vNext;
+  v = currentSeg.vDes;
+  if (iSeg < path.size()-1) {
+    vNext = path.at(iSeg+1).vDes;
+  } 
+  else {
+    vNext = 0.0;	
+  }
 
-	double tDecel = (v - vNext)/currentSeg.accel;
-	double vMean = (v + vNext)/2.0;
-	double distDecel = vMean*tDecel;
+  double tDecel = (v - vNext)/currentSeg.accel;
+  double vMean = (v + vNext)/2.0;
+  double distDecel = vMean*tDecel;
 
-	double lengthRemaining = currentSeg.length - segDistDone;
-	if(lengthRemaining < 0.0) {
-		lengthRemaining = 0.0;
-	}
-	else if (lengthRemaining < distDecel) {
-		v = sqrt(2*lengthRemaining*currentSeg.accel + pow(vNext, 2));
-	}
-	else {
-		v = v + currentSeg.accel*dt;
-	}
+  double lengthRemaining = currentSeg.length - segDistDone;
+  if(lengthRemaining < 0.0) {
+    lengthRemaining = 0.0;
+  }
+  else if (lengthRemaining < distDecel) {
+    v = sqrt(2*lengthRemaining*currentSeg.accel + pow(vNext, 2));
+  }
+  else {
+    v = v + currentSeg.accel*dt;
+  }
 
-	v = std::min(v, currentSeg.vDes); //gonna fail for negative v commands along the path
+  v = std::min(v, currentSeg.vDes); //gonna fail for negative v commands along the path
 
-	//done figuring out our velocity commands
+  //done figuring out our velocity commands
 
-	//Convert into the odometry frame from whatever frame the path segments are in
-	temp_pose_in_.header.frame_id = currentSeg.frame_id;
-	temp_pose_in_.pose.position.x = currentSeg.xRef;
-	temp_pose_in_.pose.position.y = currentSeg.yRef;
-	temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(currentSeg.tangentAng);
-	ros::Time current_transform = ros::Time::now();
-	tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
-	temp_pose_in_.header.stamp = current_transform;
-	tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
+  //Convert into the odometry frame from whatever frame the path segments are in
+  temp_pose_in_.header.frame_id = currentSeg.frame_id;
+  temp_pose_in_.pose.position.x = currentSeg.xRef;
+  temp_pose_in_.pose.position.y = currentSeg.yRef;
+  temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(currentSeg.tangentAng);
+  ros::Time current_transform = ros::Time::now();
+  tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
+  temp_pose_in_.header.stamp = current_transform;
+  tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
 
-	double tanAngle = tf::getYaw(temp_pose_out_.pose.orientation);
-	//std::cout << "iSeg " << iSeg << std::endl;
-	//std::cout << "segDistDone " << segDistDone << std::endl;
-	//std::cout << "tan angle " << tanAngle << std::endl;
-	double radius, tangentAngStart, arcAngStart, dAng, arcAng;
-	//std::cout << iSeg << std::endl;
-	switch(currentSeg.segType){
-		case 1:
-			theta = tanAngle;
-			rho = currentSeg.rho;
-			x = temp_pose_out_.pose.position.x + segDistDone*cos(theta);
-			y = temp_pose_out_.pose.position.y + segDistDone*sin(theta);
-			halt = false;
-			break;
-		case 2:
-			rho = currentSeg.rho;
-			//std::cout << "rho " << rho << std::endl;
-			radius = 1.0/fabs(rho);
-			//std::cout << "radius = " << radius << std::endl;
-			tangentAngStart = tanAngle;
-			arcAngStart = 0.0;
-			if(rho >= 0.0) {
-				arcAngStart = tangentAngStart - pi / 2.0;	
-			} else {
-				arcAngStart = tangentAngStart + pi / 2.0;
-			}
-			dAng = segDistDone*rho;
-			//std::cout << "dAng " << dAng << std::endl;
-			arcAng = arcAngStart + dAng;
-			x = temp_pose_out_.pose.position.x + radius * cos(arcAng);
-			y = temp_pose_out_.pose.position.y  + radius * sin(arcAng);
-			theta = tanAngle + dAng;
-			halt = false;
-			break;
-		default:
-			halt = true;
-			v = 0.0;
-	}
+  double tanAngle = tf::getYaw(temp_pose_out_.pose.orientation);
+  //std::cout << "iSeg " << iSeg << std::endl;
+  //std::cout << "segDistDone " << segDistDone << std::endl;
+  //std::cout << "tan angle " << tanAngle << std::endl;
+  double radius, tangentAngStart, arcAngStart, dAng, arcAng;
+  //std::cout << iSeg << std::endl;
+  switch(currentSeg.segType){
+    case 1:
+      theta = tanAngle;
+      rho = currentSeg.rho;
+      x = temp_pose_out_.pose.position.x + segDistDone*cos(theta);
+      y = temp_pose_out_.pose.position.y + segDistDone*sin(theta);
+      halt = false;
+      break;
+    case 2:
+      rho = currentSeg.rho;
+      //std::cout << "rho " << rho << std::endl;
+      radius = 1.0/fabs(rho);
+      //std::cout << "radius = " << radius << std::endl;
+      tangentAngStart = tanAngle;
+      arcAngStart = 0.0;
+      if(rho >= 0.0) {
+        arcAngStart = tangentAngStart - pi / 2.0;	
+      } else {
+        arcAngStart = tangentAngStart + pi / 2.0;
+      }
+      dAng = segDistDone*rho;
+      //std::cout << "dAng " << dAng << std::endl;
+      arcAng = arcAngStart + dAng;
+      x = temp_pose_out_.pose.position.x + radius * cos(arcAng);
+      y = temp_pose_out_.pose.position.y  + radius * sin(arcAng);
+      theta = tanAngle + dAng;
+      halt = false;
+      break;
+    default:
+      halt = true;
+      v = 0.0;
+  }
 }
 
 void IdealStateGenerator::pathCallback(const precision_navigation_msgs::Path::ConstPtr& p) {
-	//Reset initial state cause the path is about to change
-	iSeg = 0;
-	segDistDone = 0.0;
-	halt = true;   
-	path = p->segs;
+  //Reset initial state cause the path is about to change
+  iSeg = 0;
+  segDistDone = 0.0;
+  halt = true;   
+  path = p->segs;
 }
 
 void IdealStateGenerator::cmdVelCallback(const geometry_msgs::Twist::ConstPtr& cmd_vel) {
-	last_cmd_ = *cmd_vel;
+  last_cmd_ = *cmd_vel;
 }
 
 void IdealStateGenerator::odomCallback(const nav_msgs::Odometry::ConstPtr& odom) {
-	first_call_ = false;
-	last_odom_ = *odom;
-}
-
-void IdealStateGenerator::initializeDummyPath() {
-	precision_navigation_msgs::PathSegment p;
-	/*	p.frame_id = "odom";
-		p.segType =1;
-		p.xRef = 0.0;
-		p.yRef = 0.0;
-		p.tangentAng = 0.0;
-		p.rho = 0.0;
-		p.length = 2.0;
-		p.vDes = 0.5;
-		p.accel = 0.1;
-		path.push_back(p);
-
-		p.frame_id = "odom";
-		p.segType = 2;
-		p.xRef = 2.0;
-		p.yRef = 1.0;
-		p.tangentAng = 0.0;
-		p.rho = 1.0;
-		p.length = 3.1416;
-		p.vDes = 0.5;
-		p.accel = 0.1;
-		path.push_back(p);
-
-		p.frame_id = "odom";
-		p.segType = 1;
-		p.xRef = 2.0;
-		p.yRef = 2.0;
-		p.tangentAng = 3.1416;
-		p.rho = 0.0;
-		p.length = 1.0;
-		p.vDes = 0.5;
-		p.accel = 0.1;
-		path.push_back(p);
-
-		p.frame_id = "odom";
-		p.segType = 2;
-		p.xRef = 1.0;
-		p.yRef = 2.01;
-		p.tangentAng = 3.1416;
-		p.rho = -100.0;
-		p.length = 0.0157;
-		p.vDes = 0.01;
-		p.accel = 0.1;
-		path.push_back(p);
-
-		p.frame_id = "odom";
-		p.segType = 1;
-		p.xRef = 0.99;
-		p.yRef = 2.01;
-		p.tangentAng = 1.5708;
-		p.rho = 0.0;
-		p.length = 1.0;
-		p.vDes = 0.5;
-		p.accel = 0.1;
-		path.push_back(p);
-
-		p.frame_id = "odom";
-		p.segType = 2;
-		p.xRef = 1.49;
-		p.yRef = 3.01;
-		p.tangentAng = 1.5708;
-		p.rho = -2.0;
-		p.length = 0.7854;
-		p.vDes = 0.5;
-		p.accel = 0.1;
-		path.push_back(p);
-		*/	   
-	p.frame_id = "map";
-	p.segType = 1;
-	p.xRef = 0.0436;
-	p.yRef = 2.18822;
-	p.tangentAng = 2.42426;
-	p.rho = 0.0;
-	p.length = 2.3202;
-	p.vDes = 0.5;
-	p.accel = 0.1;
-	path.push_back(p);
-
-	p.frame_id = "map";
-	p.segType = 2;
-	p.xRef = -1.6972;
-	p.yRef = 3.70692;
-	p.tangentAng = 2.42426;
-	p.rho = -100.0;
-	p.length = 0.0157;
-	p.vDes = 0.005;
-	p.accel = 0.05;
-	path.push_back(p);
-
-	p.frame_id = "map";
-	p.segType = 1;
-	p.xRef = -1.7532;
-	p.yRef = 3.847;
-	p.tangentAng = 0.8272;
-	p.rho = 0.0;
-	p.length = 13.0;
-	p.vDes = 0.5;
-	p.accel = 0.1;
-	path.push_back(p);
-
-	p.frame_id = "map";
-	p.segType = 1;
-	p.xRef = 7.0274;  // start from conclusion of go-thru lab door
-	p.yRef = 13.4659;
-	p.tangentAng = 0.7121; //should come through door at 0.8272; recorded -0.862; vec from p1 to p2 is ang 0.7121  
-	p.rho = 0.0;  // is a lineseg
-	p.length = 2.1659; // lineseg length
-	p.vDes = 0.5;
-	p.accel = 0.1;
-	path.push_back(p);
-
-	// should end at 8.667,14.8812, 0.7121
-	//      // facing elevator pose is: 8.49, 16.27, 2.375  ; should be about 90deg pos rotation
-	//           // for 90-deg rotation, dist btwn pts = r*sqrt(2)
-	//                // dist btwn pt 2 and pt3 = 1.40m; ==> r23 = 0.990 m; call it 1m
-	//                     // rCenter is 1m to left of vector v12, from p2
-	//
-	p.frame_id = "map";
-	p.segType = 2;
-	p.xRef = 8.02;
-	p.yRef = 15.63;
-	p.tangentAng = 0.7121; // should agree w/ previous lineseg angle
-	p.rho = 1.0; // pos rotation, CCW, w/ 1m turning radius
-	p.length = 1.57; // r=1 * dtheta = pi/2 ==> pi/2
-	p.vDes = 0.1;
-	p.accel = 0.05;
-	path.push_back(p);
-
+  first_call_ = false;
+  last_odom_ = *odom;
 }
 
 int main(int argc, char *argv[]) {
-	ros::init(argc, argv, "wsn_ideal_state");
-	IdealStateGenerator idealState;
+  ros::init(argc, argv, "ideal_state_generator");
+  IdealStateGenerator idealState;
+
+  ros::MultiThreadedSpinner spinner(2);
+  spinner.spin();
+  return 0;
 }

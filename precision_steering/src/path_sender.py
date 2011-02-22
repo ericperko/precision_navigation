@@ -1,11 +1,11 @@
 #! /usr/bin/env python
 import roslib
-roslib.load_manifest('cwru_wsn_steering')
+roslib.load_manifest('precision_steering')
 import rospy
 
 from std_msgs.msg import String
-from cwru_wsn_steering_msgs.msg import Path
-from cwru_wsn_steering_msgs.msg import PathSegment
+from precision_navigation_msgs.msg import Path
+from precision_navigation_msgs.msg import PathSegment
 
 
 def makeDummyPaths():

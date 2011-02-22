@@ -136,6 +136,6 @@ PrecisionSteering::~PrecisionSteering() {
 }
 
 int main(int argc, char *argv[]) {
-	ros::init(argc, argv, "wsn_steering");
+	ros::init(argc, argv, "precision_steering");
 	PrecisionSteering steering;
 }

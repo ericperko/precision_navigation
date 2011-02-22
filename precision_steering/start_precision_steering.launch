@@ -14,4 +14,8 @@
 
 <node name="ideal_state_gen" pkg="precision_steering" type="ideal_state_generator" output="screen"/>
 
+<node name="octocostmap" pkg="octocostmap" type="octocostmap">
+        <remap from="scan" to="base_laser1_scan" />
+</node>
+
 </launch>
