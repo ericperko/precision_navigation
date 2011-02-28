@@ -109,7 +109,7 @@ namespace octocostmap {
           for (double dy = 0.0; dy < 1.0; dy += y_resolution) {
                 temp = origin_pt + dx*x_vec + dy*y_vec;
                 collision_pts.push_back(temp);
-                temp = origin_pt + dx*x_vec + dy*y_vec + y_vec;
+                temp = origin_pt + dx*x_vec + dy*y_vec + z_vec;
                 collision_pts.push_back(temp);
           }
         }
