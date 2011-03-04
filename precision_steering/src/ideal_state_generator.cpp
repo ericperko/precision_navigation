@@ -47,6 +47,7 @@ class IdealStateGenerator {
     //ROS communcators
     ros::NodeHandle nh_;
     ros::Publisher ideal_state_pub_;
+    ros::Publisher ideal_pose_marker_pub_;
     ros::Subscriber path_sub_;
     ros::Subscriber cmd_vel_sub_;
     ros::Subscriber odom_sub_;
@@ -61,6 +62,7 @@ const double pi = acos(-1.0);
 IdealStateGenerator::IdealStateGenerator() {
   //Setup the ideal state pub
   ideal_state_pub_= nh_.advertise<precision_navigation_msgs::DesiredState>("idealState",1);   
+  ideal_pose_marker_pub_= nh_.advertise<geometry_msgs::PoseStamped>("ideal_pose",1);   
   path_sub_ = nh_.subscribe<precision_navigation_msgs::Path>("desired_path", 1, &IdealStateGenerator::pathCallback, this);
   cmd_vel_sub_ = nh_.subscribe<geometry_msgs::Twist>("cmd_vel", 1, &IdealStateGenerator::cmdVelCallback, this);
   odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, &IdealStateGenerator::odomCallback, this);
@@ -141,14 +143,21 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
     }
     //Publish twist message
     ideal_state_pub_.publish(desiredState_);
+    geometry_msgs::PoseStamped des_pose;
+    des_pose.header = desiredState_.header;
+    des_pose.pose.position.x = desiredState_.x;
+    des_pose.pose.position.y = desiredState_.y;
+    des_pose.pose.orientation = tf::createQuaternionMsgFromYaw(theta);
+    ideal_pose_marker_pub_.publish(des_pose);
   }
 }
 
 bool IdealStateGenerator::checkCollisions(bool checkEntireVolume) {
   geometry_msgs::PointStamped origin, origin_des_frame;
   origin_des_frame.header = desiredState_.header;
-  origin_des_frame.point.x = desiredState_.x;
-  origin_des_frame.point.x = desiredState_.y;
+  origin_des_frame.header.frame_id = std::string("base_link");
+  origin_des_frame.point.x = 0.0;
+  origin_des_frame.point.x = 0.0;
   origin_des_frame.point.z = 0.0;
   try {
     tf_listener_.transformPoint("base_link", origin_des_frame, origin);

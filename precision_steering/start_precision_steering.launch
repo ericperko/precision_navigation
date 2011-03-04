@@ -4,7 +4,7 @@
 
 <node name="precision_steering" pkg="precision_steering" type="steering_controller" output="screen">
 	<remap from="odometry" to="/odom" />
-	<param name="k_v" value="0.0" />
+	<param name="k_v" value="1.0" />
 	<param name="k_psi" value="1.0" />
 	<param name="convergence_rate" value="0.8" />
 	<param name="omega_cmd_sat" value="2.0" />
