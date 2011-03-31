@@ -35,6 +35,7 @@
 #include <octocostmap/octocostmap.h>
 #include <octomap_ros/conversions.h>
 #include <octomap_ros/OctomapBinary.h>
+#include <pcl_ros/transforms.h>
 
 #include <tf/transform_datatypes.h>
 #include <boost/foreach.hpp>
@@ -59,12 +60,23 @@ namespace octocostmap {
 
     map_pub_ = nh_.advertise<octomap_ros::OctomapBinary>("octomap", 1, true);
 
-    octree_ = new octomap::OcTree(map_resolution_);
+    octree_ = boost::shared_ptr<octomap::OcTreeROS>(new octomap::OcTreeROS(map_resolution_));
+    ROS_DEBUG("Octocostmap constructed");
+  }
+
+  bool OctoCostmap::insertPointCloudXYZ(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud) {
+    pcl::PointCloud<pcl::PointXYZ> transformed_cloud;
+    pcl_ros::transformPointCloud(map_frame_, *cloud, transformed_cloud, tfl_);
+    tf::StampedTransform transform;
+    tfl_.lookupTransform(map_frame_, cloud->header.frame_id, cloud->header.stamp, transform); 
+    pcl::PointXYZ origin(transform.getOrigin().getX(), transform.getOrigin().getY(), transform.getOrigin().getZ());
+    octree_->insertScan(transformed_cloud, origin);
+    return true;
   }
 
   void OctoCostmap::pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud) {
     ros::WallTime start = ros::WallTime::now();
-    octomap::point3d octomap_3d_point;
+    /*octomap::point3d octomap_3d_point;
     octomap::Pointcloud octomap_pointcloud;
 
     try {
@@ -82,20 +94,23 @@ namespace octocostmap {
       octomath::Vector3 laser_point(transform.getOrigin().getX(), transform.getOrigin().getY(), transform.getOrigin().getZ());
       octomath::Quaternion laser_quat(transform.getRotation().getW(), transform.getRotation().getX(), transform.getRotation().getY(), transform.getRotation().getZ());
       octomath::Pose6D laser_pose(laser_point, laser_quat);
-      octree_->insertScan(octomap_pointcloud, laser_pose);
+      octree_->octree.insertScan(octomap_pointcloud, laser_pose);
     } catch (tf::TransformException ex) {
       ROS_ERROR("Error finding origin of the cloud in the map frame. Error was %s", ex.what());
-    }
-    ROS_DEBUG("Point cloud callback took %f milliseconds for %d points", (ros::WallTime::now() - start).toSec() * 1000.0, octomap_pointcloud.size());
+    } */
+    insertPointCloudXYZ(cloud);
+    ROS_DEBUG("Point cloud callback took %f milliseconds for %d points", (ros::WallTime::now() - start).toSec() * 1000.0, cloud->points.size());
     publishOctomapMsg();
   }
 
   void OctoCostmap::laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
     ros::WallTime start = ros::WallTime::now();
-    octomap::point3d octomap_3d_point;
+    sensor_msgs::PointCloud2 cloud;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    /*octomap::point3d octomap_3d_point;
     octomap::Pointcloud octomap_pointcloud;
 
-    sensor_msgs::PointCloud cloud;
+    sensor_msgs::PointCloud2 cloud;
     try {
       projector_.projectLaser(*scan, cloud);
       //projector_.transformLaserScanToPointCloud(scan->header.frame_id, *scan, cloud, tfl_);
@@ -112,10 +127,13 @@ namespace octocostmap {
       octomath::Vector3 laser_point(transform.getOrigin().getX(), transform.getOrigin().getY(), transform.getOrigin().getZ());
       octomath::Quaternion laser_quat(transform.getRotation().getW(), transform.getRotation().getX(), transform.getRotation().getY(), transform.getRotation().getZ());
       octomath::Pose6D laser_pose(laser_point, laser_quat);
-      octree_->insertScan(octomap_pointcloud, laser_pose);
+      //octree_->insertScan(octomap_pointcloud, laser_pose);
     } catch (tf::TransformException ex) {
       ROS_ERROR("Error finding origin of the laser in the map frame. Error was %s", ex.what());
-    }
+    } */
+    projector_.projectLaser(*scan, cloud);
+    pcl::fromROSMsg(cloud, *pcl_cloud);
+    insertPointCloudXYZ(pcl_cloud);
     ROS_DEBUG("Laser callback took %f milliseconds", (ros::WallTime::now() - start).toSec() * 1000.0);
     publishOctomapMsg();
   }
@@ -124,7 +142,7 @@ namespace octocostmap {
     if (map_pub_.getNumSubscribers() > 0) {
       if (last_sent_time_ + publish_period_ < ros::Time::now()) {
         octomap_ros::OctomapBinary::Ptr map_ptr = boost::make_shared<octomap_ros::OctomapBinary>();
-        octomap::octomapMapToMsg(*octree_, *map_ptr);
+        octomap::octomapMapToMsg(octree_->octree, *map_ptr);
         map_ptr->header.frame_id = map_frame_;
         map_pub_.publish(map_ptr);
         last_sent_time_ = ros::Time::now();
@@ -134,11 +152,10 @@ namespace octocostmap {
   }
 
   void OctoCostmap::writeBinaryMap(const std::string& filename) {
-    octree_->writeBinary(filename);
+    octree_->octree.writeBinary(filename);
   }
 
   OctoCostmap::~OctoCostmap() {
-    delete octree_;
     delete laser_tf_filter_;
     delete pc_tf_filter_;
   }

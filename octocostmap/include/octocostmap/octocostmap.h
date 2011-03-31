@@ -43,7 +43,7 @@
 #include <laser_geometry/laser_geometry.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
-#include <octomap/octomap.h>
+#include <octomap_ros/OctomapROS.h>
 
 namespace octocostmap {
     class OctoCostmap {
@@ -61,7 +61,8 @@ namespace octocostmap {
             void writeBinaryMap(const std::string& filename);
 
             double lookupPoint(double &x, double &y, double &z) {
-                octomap::OcTreeNode *cell = octree_->search(x,y,z);
+                pcl::PointXYZ p(x,y,z);
+                octomap::OcTreeROS::NodeType *cell = octree_->search(p);
                 if (cell) {
                   return cell->getOccupancy();
                 } else {
@@ -82,12 +83,13 @@ namespace octocostmap {
             std::string map_frame_;
             double map_resolution_;
             laser_geometry::LaserProjection projector_;
-            octomap::OcTree *octree_;
+            boost::shared_ptr<octomap::OcTreeROS> octree_;
             ros::Time last_sent_time_;
             ros::Duration publish_period_;
 
             void laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan);
             void pointCloudCallback(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud);
+            bool insertPointCloudXYZ(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud);
     };
 };
 
