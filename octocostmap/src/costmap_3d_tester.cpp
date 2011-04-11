@@ -39,12 +39,13 @@
 
 void timerCallback(octocostmap::Costmap3D *costmap, const ros::TimerEvent& event) {
   ROS_DEBUG("Last callback took %f seconds", event.profile.last_duration.toSec());
-  geometry_msgs::PointStamped origin;
+  geometry_msgs::PoseStamped origin;
   origin.header.frame_id = "base_link";
   origin.header.stamp = ros::Time::now();
-  origin.point.x = -0.711;
-  origin.point.y = -0.3048;
-  origin.point.z = 0.0;
+  origin.pose.position.x = -0.711;
+  origin.pose.position.y = -0.3048;
+  origin.pose.position.z = 0.0;
+  origin.pose.orientation.w = 1.0;
   double width = 0.6096;
   double length = 1.422;
   double height = 2.00;

@@ -54,16 +54,18 @@ namespace octocostmap {
     }
   }
 
-  bool Costmap3D::checkRectangularPrismBase(const geometry_msgs::PointStamped &origin, double width, double height, double length, double resolution, bool check_full_volume) {
+  bool Costmap3D::checkRectangularPrismBase(const geometry_msgs::PoseStamped &origin, double width, double height, double length, double resolution, bool check_full_volume) {
     std::vector<tf::Point > collision_pts;
+    tf::Stamped<tf::Pose > tf_origin;
+    tf::poseStampedMsgToTF(origin, tf_origin);
     tf::Stamped<tf::Point > temp_origin;
-    tf::pointStampedMsgToTF(origin, temp_origin);
     tf::StampedTransform transform;
     double num_pts = width * height * length / (resolution * resolution * resolution);
     try {
-      tfl_.lookupTransform(map_frame_, temp_origin.frame_id_, temp_origin.stamp_, transform);
-      tf::Point origin_pt = transform * temp_origin;
-      tf::Transform rotation_only(transform.getRotation());
+      tfl_.lookupTransform(map_frame_, tf_origin.frame_id_, tf_origin.stamp_, transform);
+      tf::Pose origin_p = transform * tf_origin;
+      tf::Point origin_pt = origin_p.getOrigin();
+      tf::Transform rotation_only(origin_p.getRotation());
       tf::Vector3 x_vec = rotation_only * tf::Vector3(length,0,0);
       tf::Vector3 y_vec = rotation_only * tf::Vector3(0,width,0);
       tf::Vector3 z_vec = rotation_only * tf::Vector3(0,0,height);

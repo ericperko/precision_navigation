@@ -4,7 +4,8 @@
 
 <node name="precision_steering" pkg="precision_steering" type="steering_controller" output="screen">
 	<remap from="odometry" to="/odom" />
-	<param name="k_v" value="1.0" />
+        <param name="loop_rate" value="10.0" />
+	<param name="k_v" value="0.0" />
 	<param name="k_psi" value="1.0" />
 	<param name="convergence_rate" value="0.8" />
 	<param name="omega_cmd_sat" value="2.0" />
@@ -12,7 +13,9 @@
 	<param name="steering_algorithm" value="precision_steering_algorithms/PhaseSpaceSteering" />
 </node>
 
-<node name="ideal_state_gen" pkg="precision_steering" type="ideal_state_generator" output="screen"/>
+<node name="ideal_state_gen" pkg="precision_steering" type="ideal_state_generator" output="screen">
+        <param name="loop_rate" value="10.0" />
+</node>
 
 <node name="octocostmap" pkg="octocostmap" type="octocostmap">
         <remap from="scan" to="base_laser1_scan" />

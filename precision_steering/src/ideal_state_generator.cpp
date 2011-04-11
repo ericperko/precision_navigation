@@ -82,6 +82,7 @@ IdealStateGenerator::IdealStateGenerator() {
 
 
   tf_listener_.waitForTransform("odom", "map", ros::Time::now(), ros::Duration(10));
+  tf_listener_.waitForTransform("odom", "base_link", ros::Time::now(), ros::Duration(10));
   desiredState_ = makeHaltState();
 }
 
@@ -153,17 +154,21 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
 }
 
 bool IdealStateGenerator::checkCollisions(bool checkEntireVolume) {
-  geometry_msgs::PointStamped origin, origin_des_frame;
+  geometry_msgs::PoseStamped origin, origin_des_frame;
   origin_des_frame.header = desiredState_.header;
-  origin_des_frame.header.frame_id = std::string("base_link");
+  /*origin_des_frame.header.frame_id = std::string("base_link");
   origin_des_frame.point.x = 0.0;
-  origin_des_frame.point.x = 0.0;
-  origin_des_frame.point.z = 0.0;
+  origin_des_frame.point.y = 0.0;
+  origin_des_frame.point.z = 0.0; */
+  origin_des_frame.pose.position.x = desiredState_.x;
+  origin_des_frame.pose.position.y = desiredState_.y;
+  origin_des_frame.pose.position.z = 0.0;
+  origin_des_frame.pose.orientation = tf::createQuaternionMsgFromYaw(desiredState_.theta);
   try {
-    tf_listener_.transformPoint("base_link", origin_des_frame, origin);
-    origin.point.x += -0.711;
-    origin.point.y += -0.3048;
-    origin.point.z += 0.0;
+    tf_listener_.transformPose("base_link", origin_des_frame, origin);
+    origin.pose.position.x += -0.711;
+    origin.pose.position.y += -0.3048;
+    origin.pose.position.z += 0.0;
     double width = 0.6096;
     double length = 1.422;
     double height = 2.00;
