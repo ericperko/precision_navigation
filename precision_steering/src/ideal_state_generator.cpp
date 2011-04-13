@@ -165,13 +165,18 @@ bool IdealStateGenerator::checkCollisions(bool checkEntireVolume) {
   origin_des_frame.pose.position.z = 0.0;
   origin_des_frame.pose.orientation = tf::createQuaternionMsgFromYaw(desiredState_.theta);
   try {
-    tf_listener_.transformPose("base_link", origin_des_frame, origin);
+    /*tf_listener_.transformPose("base_link", origin_des_frame, origin);
     origin.pose.position.x += -0.711;
     origin.pose.position.y += -0.3048;
-    origin.pose.position.z += 0.0;
+    origin.pose.position.z += 0.0; */
     double width = 0.6096;
     double length = 1.422;
     double height = 2.00;
+    tf::Stamped<tf::Pose > tf_origin;
+    tf::poseStampedMsgToTF(origin_des_frame, tf_origin);
+    tf::Pose shift_amount(tf::createQuaternionFromYaw(0.0), tf::Vector3(-length/2., -width/2., 0.));
+    tf_origin.setData(tf_origin * shift_amount);
+    tf::poseStampedTFToMsg(tf_origin, origin);
     double resolution = 0.05;
     bool collision_detected = costmap_->checkRectangularPrismBase(origin, width, height, length, resolution, checkEntireVolume);
     if (collision_detected) {
