@@ -88,25 +88,32 @@ IdealStateGenerator::IdealStateGenerator() {
 
 //We want to take the current location of the base and set that as the desired state with 0 velocity and rho. 
 precision_navigation_msgs::DesiredState IdealStateGenerator::makeHaltState() {
-  //Convert into the odometry frame from whatever frame the path segments are in
-  temp_pose_in_.header.frame_id = "base_link";
-  temp_pose_in_.pose.position.x = 0.0;
-  temp_pose_in_.pose.position.y = 0.0;
-  temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
-  ros::Time current_transform = ros::Time::now();
-  tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
-  temp_pose_in_.header.stamp = current_transform;
-  tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
-
-  double tanAngle = tf::getYaw(temp_pose_out_.pose.orientation);
   precision_navigation_msgs::DesiredState halt_state;
-  halt_state.header.frame_id = "odom";
-  halt_state.header.stamp = ros::Time::now();
-  halt_state.x = temp_pose_out_.pose.position.x;
-  halt_state.y = temp_pose_out_.pose.position.y;
-  halt_state.theta = tanAngle;
-  halt_state.v = 0.0;
-  halt_state.rho = 0.0;
+  //If the path is empty, we want to actually halt where we are
+  //If the path is non empty, we should just keep sending the last desired state, but with 0 v, just to be safe
+  if (path.size() > 0) {
+    halt_state = desiredState_;
+    halt_state.v = 0.0;
+  } else {
+    //Convert into the odometry frame from whatever frame the path segments are in
+    temp_pose_in_.header.frame_id = "base_link";
+    temp_pose_in_.pose.position.x = 0.0;
+    temp_pose_in_.pose.position.y = 0.0;
+    temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
+    ros::Time current_transform = ros::Time::now();
+    tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
+    temp_pose_in_.header.stamp = current_transform;
+    tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
+
+    double tanAngle = tf::getYaw(temp_pose_out_.pose.orientation);
+    halt_state.header.frame_id = "odom";
+    halt_state.header.stamp = ros::Time::now();
+    halt_state.x = temp_pose_out_.pose.position.x;
+    halt_state.y = temp_pose_out_.pose.position.y;
+    halt_state.theta = tanAngle;
+    halt_state.v = 0.0;
+    halt_state.rho = 0.0;
+  }
   return halt_state;
 
 }
@@ -158,18 +165,18 @@ bool IdealStateGenerator::checkCollisions(bool checkEntireVolume) {
   geometry_msgs::PoseStamped origin, origin_des_frame;
   origin_des_frame.header = desiredState_.header;
   /*origin_des_frame.header.frame_id = std::string("base_link");
-  origin_des_frame.point.x = 0.0;
-  origin_des_frame.point.y = 0.0;
-  origin_des_frame.point.z = 0.0; */
+    origin_des_frame.point.x = 0.0;
+    origin_des_frame.point.y = 0.0;
+    origin_des_frame.point.z = 0.0; */
   origin_des_frame.pose.position.x = desiredState_.x;
   origin_des_frame.pose.position.y = desiredState_.y;
   origin_des_frame.pose.position.z = 0.0;
   origin_des_frame.pose.orientation = tf::createQuaternionMsgFromYaw(desiredState_.theta);
   try {
     /*tf_listener_.transformPose("base_link", origin_des_frame, origin);
-    origin.pose.position.x += -0.711;
-    origin.pose.position.y += -0.3048;
-    origin.pose.position.z += 0.0; */
+      origin.pose.position.x += -0.711;
+      origin.pose.position.y += -0.3048;
+      origin.pose.position.z += 0.0; */
     double width = 0.6096;
     double length = 1.422;
     double height = 2.00;
