@@ -123,7 +123,8 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
   if(!first_call_) {
     //Orientation is a quaternion, so need to get yaw angle in rads.. unless you want a quaternion
     theta = tf::getYaw(last_odom_.pose.pose.orientation);
-    v = last_cmd_.linear.x;
+    //v = last_cmd_.linear.x; //last velocity that was actually commanded by steering
+    v = desiredState_.v; //last desired velocity
     computeState(x,y,theta,v,rho);
 
     //Put the temp vars into the desiredState
