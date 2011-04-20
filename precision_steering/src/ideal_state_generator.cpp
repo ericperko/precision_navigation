@@ -53,7 +53,7 @@ class IdealStateGenerator {
     ros::Subscriber odom_sub_;
     tf::TransformListener tf_listener_;	
     geometry_msgs::PoseStamped temp_pose_in_, temp_pose_out_;
-    octocostmap::Costmap3D *costmap_;
+    boost::shared_ptr<octocostmap::Costmap3D> costmap_;
     ros::Timer compute_loop_timer_;
 };
 
@@ -68,7 +68,7 @@ IdealStateGenerator::IdealStateGenerator() {
   odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, &IdealStateGenerator::odomCallback, this);
   nh_.param("loop_rate",loop_rate,20.0); // default 20Hz
   dt = 1.0/loop_rate;
-  costmap_ = new octocostmap::Costmap3D("octocostmap", tf_listener_);
+  costmap_ = boost::shared_ptr<octocostmap::Costmap3D>(new octocostmap::Costmap3D("octocostmap", tf_listener_));
 
   first_call_ = true;
 
