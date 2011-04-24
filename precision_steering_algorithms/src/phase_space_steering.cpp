@@ -48,7 +48,8 @@ PLUGINLIB_DECLARE_CLASS(precision_steering_algorithms, PhaseSpaceSteering, phase
 
 			//Check if the desired speed is 0
 			//If so we will just set it there and be done with velocity computation
-			if (fabs(v_des) < 1e-7) {
+			//if (fabs(v_des) < 1e-7) {
+                        if (false) {
 				ROS_DEBUG("v_des was %f, abs was %f, so setting it to 0", v_des, fabs(v_des));
 				v = 0.0;
 			} else {	

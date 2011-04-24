@@ -132,7 +132,12 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
     theta = tf::getYaw(last_odom_.pose.pose.orientation);
     //v = last_cmd_.linear.x; //last velocity that was actually commanded by steering
     v = desiredState_.v; //last desired velocity
-    computeState(x,y,theta,v,rho);
+    if (path.size() > 0) {
+      computeState(x,y,theta,v,rho);
+    } else {
+      v = 0.0;
+      halt = true;
+    }
 
     //Put the temp vars into the desiredState
     desiredState_.header.frame_id = "odom";
@@ -204,9 +209,9 @@ void IdealStateGenerator::computeState(float& x, float& y, float& theta, float& 
   double dL = v * dt;
   if(iSeg >= path.size()) {
     //Out of bounds
+    iSeg = path.size()-1;
     halt = true;
     v = 0.0;
-    return;
   }
 
   //Need to only advance by the projection of what we did onto the desired heading	
@@ -220,9 +225,14 @@ void IdealStateGenerator::computeState(float& x, float& y, float& theta, float& 
 
   if(iSeg >= path.size()) {
     //Out of bounds
+    iSeg = path.size()-1;
     halt = true;
     v = 0.0;
-    return;
+  }
+
+  if(halt) {
+    //If we should stop because we ran out of path, we should command the state corresponding to s=1
+    segDistDone = lengthSeg;
   }
 
   precision_navigation_msgs::PathSegment currentSeg = path.at(iSeg);

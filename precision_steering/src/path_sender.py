@@ -433,6 +433,19 @@ def makeDummyPaths():
 	p8.segs.append(p)
 	paths['lab_test'] = p8
 
+        p9 = Path()
+        p.frame_id = "base_link"
+	p.segType = 2
+	p.xRef =  0.0
+	p.yRef = 0.0
+	p.tangentAng =  0.0
+	p.rho = 100.0
+	p.length = 3.14159
+	p.vDes = 0.5
+	p.accel = 0.1
+        p9.segs.append(p)
+        paths['spin_in_place_test'] = p9
+
 	return paths
 
 class PathSender:
