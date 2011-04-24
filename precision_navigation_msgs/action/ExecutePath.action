@@ -1,0 +1,11 @@
+#Goal: A list of PathSegments to execute in order
+precision_navigation_msgs/PathSegment[] segments
+
+---
+#Result: No result beyond the built-in action statuses (success, aborted, etc)
+
+---
+#Feedback: Current segment number, the segment itself and distance along the segment
+uint32 seg_number
+precision_navigation_msgs/PathSegment current_segment
+float64 seg_distance_done
