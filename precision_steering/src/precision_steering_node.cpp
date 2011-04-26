@@ -84,11 +84,11 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 	while(ros::ok()) {
 		if (!firstCall) // do this only when PSO is warmed up
 		{
-			x_Des = curDesState.x;
-			y_Des = curDesState.y;
-			v_Des = curDesState.v;
-			psi_Des = curDesState.theta;
-			rho_Des = curDesState.rho;
+			x_Des = curDesState.des_pose.position.x;
+			y_Des = curDesState.des_pose.position.y;
+			v_Des = curDesState.des_speed;
+			psi_Des = tf::getYaw(curDesState.des_pose.orientation);
+			rho_Des = curDesState.des_rho;
 
 			//Orientation is a quaternion, so need to get yaw angle in rads.. unless you want a quaternion
 			x_PSO = current_odom.pose.pose.position.x;
