@@ -18,7 +18,7 @@
 	<param name="steering_algorithm" value="precision_steering_algorithms/PhaseSpaceSteering" />
 </node>
 
-<node name="ideal_state_gen" pkg="precision_steering" type="ideal_state_generator" output="screen" launch-prefix="$(arg launch_prefix)" >
+<node name="ideal_state_gen" pkg="precision_steering" type="ideal_state_generator" launch-prefix="$(arg launch_prefix)" >
 	<param name="loop_rate" value="10.0" />
 </node>
 

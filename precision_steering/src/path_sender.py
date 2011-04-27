@@ -491,10 +491,11 @@ class PathSender:
 	def __init__(self):
 		self.paths = makeDummyPaths()
 		self.action_client = \
-                        actionlib.SimpleActionClient("exeute_path", ExecutePathAction)
+                        actionlib.SimpleActionClient("execute_path", ExecutePathAction)
 		self.command_sub = rospy.Subscriber('chatter', String, self.handle_chatter)
-                self.action_client.wait_for_server()
-                ROS_INFO("Execute path server found. Ready for commands")
+                while not rospy.is_shutdown() and not self.action_client.wait_for_server(rospy.Duration(5.0)):
+                    rospy.logwarn("Unable to connect to execute_path server. Retrying")
+                rospy.loginfo("Execute path server found. Ready for commands")
 
 	def handle_chatter(self, msg):
 		if 'open' in msg.data or 'close' in msg.data:
@@ -502,11 +503,11 @@ class PathSender:
 		else:
 		    path_goal = self.paths.get(msg.data, None)
                     if path_goal:
-                        client.send_goal(path_goal)
-                        ROS_INFO("Sent %s" % (msg.data))
+                        self.action_client.send_goal(path_goal)
+                        rospy.loginfo("Sent %s" % (msg.data))
                     else:
-                        client.cancel_goal()
-                        ROS_INFO("Stop received")
+                        self.action_client.cancel_goal()
+                        rospy.loginfo("Stop received")
 
 if __name__ == "__main__":
 	rospy.init_node("path_sender")

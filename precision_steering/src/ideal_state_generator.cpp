@@ -100,6 +100,7 @@ precision_navigation_msgs::DesiredState IdealStateGenerator::makeHaltState(bool 
     tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
 
     halt_state.header.frame_id = "odom";
+    halt_state.seg_type = precision_navigation_msgs::PathSegment::SPIN_IN_PLACE;
     halt_state.header.stamp = ros::Time::now();
     halt_state.des_pose = temp_pose_out_.pose;
     halt_state.des_speed = 0.0;
@@ -116,13 +117,20 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
   new_desired_state.header.stamp = ros::Time::now();
   // if we actually have a path to execute, try to execute it, otherwise just output our current position as the goal
   if (as_.isActive()) {
-    computeState(new_desired_state);
-    if(checkCollisions(false, new_desired_state)) {
+    ROS_DEBUG("We have an active goal. Compute state");
+    if (computeState(new_desired_state)) {
+        ROS_DEBUG("State computation failed. Command current position");
+        new_desired_state = makeHaltState(false);
+    }
+    if(!checkCollisions(false, new_desired_state)) {
+      ROS_DEBUG("No collision detected. Passing on current desired state");
       desiredState_ = new_desired_state;
     } else {
+      ROS_DEBUG("Collision detected. Commanding current position");
       desiredState_ = makeHaltState(false); 
     }
   } else {
+    ROS_DEBUG("No active goal, so sending last desired state");
     desiredState_ = makeHaltState(true);
   }
 
@@ -156,6 +164,7 @@ bool IdealStateGenerator::checkCollisions(bool checkEntireVolume, const precisio
     tf_origin.setData(tf_origin * shift_amount);
     tf::poseStampedTFToMsg(tf_origin, origin);
     double resolution = 0.05;
+    ROS_DEBUG_STREAM("origin: " << origin);
     bool collision_detected = costmap_->checkRectangularPrismBase(origin, width, height, length, resolution, checkEntireVolume);
     if (collision_detected) {
       ROS_WARN("collision_detected");
@@ -259,12 +268,14 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
   //std::cout << seg_number_ << std::endl;
   switch(currentSeg.seg_type){
     case precision_navigation_msgs::PathSegment::LINE:
+      new_des_state.seg_type = currentSeg.seg_type;
       new_des_state.des_pose.position.x = temp_pose_out_.pose.position.x + seg_length_done_*cos(tanAngle);
       new_des_state.des_pose.position.y = temp_pose_out_.pose.position.y + seg_length_done_*sin(tanAngle);
       new_des_state.des_pose.orientation = tf::createQuaternionMsgFromYaw(tanAngle);
       new_des_state.des_rho = currentSeg.curvature;
       new_des_state.des_speed = v;
       new_des_state.des_lseg = seg_length_done_;
+      break;
     case precision_navigation_msgs::PathSegment::ARC:
       rho = currentSeg.curvature;
       //std::cout << "rho " << rho << std::endl;
@@ -280,12 +291,14 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
       dAng = seg_length_done_*rho;
       //std::cout << "dAng " << dAng << std::endl;
       arcAng = arcAngStart + dAng;
+      new_des_state.seg_type = currentSeg.seg_type;
       new_des_state.des_pose.position.x = temp_pose_out_.pose.position.x + radius * cos(arcAng);
       new_des_state.des_pose.position.y = temp_pose_out_.pose.position.y  + radius * sin(arcAng);
       new_des_state.des_pose.orientation = tf::createQuaternionMsgFromYaw(tanAngle + dAng);
       new_des_state.des_rho = currentSeg.curvature;
       new_des_state.des_speed = v;
       new_des_state.des_lseg = seg_length_done_;
+      break;
     default:
       ROS_WARN("Unknown segment type. Type was %d. Halting", currentSeg.seg_type);
       new_des_state.des_speed = 0.0;

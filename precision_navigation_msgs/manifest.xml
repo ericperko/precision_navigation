@@ -10,6 +10,7 @@
   <url>http://ros.org/wiki/precision_navigation_msgs</url>
   <depend package="actionlib_msgs"/>
   <depend package="std_msgs"/>
+  <depend package="geometry_msgs" />
 
 </package>
 
