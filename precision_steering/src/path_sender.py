@@ -472,14 +472,30 @@ def makeDummyPaths():
 	paths['lab_test'] = p8
 
         p9 = ExecutePathGoal()
-        p.header.frame_id = "base_link"
-	p.seg_type = PathSegment.ARC
+        p = PathSegment()
+        p.header.frame_id = "odom"
+	p.seg_type = PathSegment.SPIN_IN_PLACE
 	p.ref_point.x =  0.0
 	p.ref_point.y = 0.0
 	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(0.00000, (0,0,1))))
-	p.curvature = 100.0
+	p.curvature = 1.0
 	p.seg_length = 3.14159
-	p.max_speeds.linear.x = 0.5
+	p.max_speeds.linear.x = 0.0
+        p.max_speeds.angular.z = 1.0
+	p.accel_limit = 0.1
+	p.decel_limit = 0.1
+        p9.segments.append(p)
+
+        p = PathSegment()
+        p.header.frame_id = "odom"
+	p.seg_type = PathSegment.SPIN_IN_PLACE
+	p.ref_point.x =  0.0
+	p.ref_point.y = 0.0
+	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(3.14159, (0,0,1))))
+	p.curvature = -1.0
+	p.seg_length = 3.14159
+	p.max_speeds.linear.x = 0.0
+        p.max_speeds.angular.z = 1.0
 	p.accel_limit = 0.1
 	p.decel_limit = 0.1
         p9.segments.append(p)
