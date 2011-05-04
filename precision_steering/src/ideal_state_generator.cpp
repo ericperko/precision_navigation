@@ -119,8 +119,8 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
   if (as_.isActive()) {
     ROS_DEBUG("We have an active goal. Compute state");
     if (computeState(new_desired_state)) {
-        ROS_DEBUG("State computation failed. Command current position");
-        new_desired_state = makeHaltState(false);
+      ROS_DEBUG("State computation failed. Command current position");
+      new_desired_state = makeHaltState(false);
     }
     if(!checkCollisions(false, new_desired_state)) {
       ROS_DEBUG("No collision detected. Passing on current desired state");
@@ -189,19 +189,23 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
     end_of_path = true;
   }
 
-  temp_pose_in_.header.frame_id = "base_link";
-  temp_pose_in_.pose.position.x = 0.0;
-  temp_pose_in_.pose.position.y = 0.0;
-  temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
   ros::Time current_transform = ros::Time::now();
-  tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
-  temp_pose_in_.header.stamp = current_transform;
-  tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
-  double psiPSO = tf::getYaw(temp_pose_out_.pose.orientation);
-  double psiDes = tf::getYaw(desiredState_.des_pose.orientation);
-  //Need to only advance by the projection of what we did onto the desired heading	
-  // formula is v * dt * cos(psiDes - psiPSO)
-  seg_length_done_ = seg_length_done_ + dL * cos(psiDes - psiPSO);
+  if (path_.at(seg_number_).seg_type == precision_navigation_msgs::PathSegment::SPIN_IN_PLACE) {
+    seg_length_done_ = seg_length_done_ + dL;
+  } else {
+    temp_pose_in_.header.frame_id = "base_link";
+    temp_pose_in_.pose.position.x = 0.0;
+    temp_pose_in_.pose.position.y = 0.0;
+    temp_pose_in_.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
+    tf_listener_.getLatestCommonTime(temp_pose_in_.header.frame_id, "odom", current_transform, NULL);
+    temp_pose_in_.header.stamp = current_transform;
+    tf_listener_.transformPose("odom", temp_pose_in_, temp_pose_out_);
+    double psiPSO = tf::getYaw(temp_pose_out_.pose.orientation);
+    double psiDes = tf::getYaw(desiredState_.des_pose.orientation);
+    //Need to only advance by the projection of what we did onto the desired heading	
+    // formula is v * dt * cos(psiDes - psiPSO)
+    seg_length_done_ = seg_length_done_ + dL * cos(psiDes - psiPSO);
+  }
   double lengthSeg = path_.at(seg_number_).seg_length;
   if(seg_length_done_ > lengthSeg) {
     seg_length_done_ = 0.0;
@@ -224,11 +228,15 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
 
   double vNext;
   v = currentSeg.max_speeds.linear.x;
-  if (seg_number_ < path_.size()-1) {
-    vNext = path_.at(seg_number_+1).max_speeds.linear.x;
-  } 
-  else {
-    vNext = 0.0;	
+  if (currentSeg.seg_type == precision_navigation_msgs::PathSegment::SPIN_IN_PLACE) {
+    vNext = 0.0;
+  } else {
+    if (seg_number_ < path_.size()-1) {
+      vNext = path_.at(seg_number_+1).max_speeds.linear.x;
+    } 
+    else {
+      vNext = 0.0;	
+    }
   }
 
   double tDecel = (v - vNext)/currentSeg.decel_limit;
@@ -246,7 +254,11 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
     v = v + currentSeg.accel_limit*dt_;
   }
 
-  v = std::min(v, currentSeg.max_speeds.linear.x); //gonna fail for negative v commands along the path
+  if (currentSeg.seg_type == precision_navigation_msgs::PathSegment::SPIN_IN_PLACE) {
+    v = std::min(v, currentSeg.max_speeds.angular.z);
+  } else {
+    v = std::min(v, currentSeg.max_speeds.linear.x); //gonna fail for negative v commands along the path
+  }
 
   //done figuring out our velocity commands
 
@@ -294,6 +306,25 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
       new_des_state.seg_type = currentSeg.seg_type;
       new_des_state.des_pose.position.x = temp_pose_out_.pose.position.x + radius * cos(arcAng);
       new_des_state.des_pose.position.y = temp_pose_out_.pose.position.y  + radius * sin(arcAng);
+      new_des_state.des_pose.orientation = tf::createQuaternionMsgFromYaw(tanAngle + dAng);
+      new_des_state.des_rho = currentSeg.curvature;
+      new_des_state.des_speed = v;
+      new_des_state.des_lseg = seg_length_done_;
+      break;
+    case precision_navigation_msgs::PathSegment::SPIN_IN_PLACE:
+      rho = currentSeg.curvature;
+      tangentAngStart = tanAngle;
+      arcAngStart = 0.0;
+      if(rho >= 0.0) {
+        arcAngStart = tangentAngStart - M_PI / 2.0;	
+      } else {
+        arcAngStart = tangentAngStart + M_PI / 2.0;
+      }
+      dAng = seg_length_done_*rho;
+      arcAng = arcAngStart + dAng;
+      new_des_state.seg_type = currentSeg.seg_type;
+      new_des_state.des_pose.position.x = temp_pose_out_.pose.position.x;
+      new_des_state.des_pose.position.y = temp_pose_out_.pose.position.y;
       new_des_state.des_pose.orientation = tf::createQuaternionMsgFromYaw(tanAngle + dAng);
       new_des_state.des_rho = currentSeg.curvature;
       new_des_state.des_speed = v;

@@ -1,8 +1,8 @@
 #include <ros/ros.h>
 #include <precision_steering/steering_base.h>
 
-#ifndef CWRU_WSN_STEERING_SECOND_ORDER_STEERING_H_
-#define CWRU_WSN_STEERING_SECOND_ORDER_STEERING_H_
+#ifndef PRECISION_STEERING_SECOND_ORDER_STEERING_H_
+#define PRECISION_STEERING_SECOND_ORDER_STEERING_H_
 
 namespace second_order_steering
 {
@@ -11,7 +11,7 @@ namespace second_order_steering
 		public:
 			SecondOrderSteering();
 			void initialize(ros::NodeHandle nh_);
-			void computeVelocities(double x_PSO, double y_PSO, double psi_PSO, double x_des, double y_des, double v_des, double psi_des, double rho_des, double &v, double &omega);
+			void computeVelocities(const precision_navigation_msgs::DesiredState& des_state, const nav_msgs::Odometry& current_odom, geometry_msgs::Twist &command_vel);
 		private:
 			double k_psi;
 			double k_v;

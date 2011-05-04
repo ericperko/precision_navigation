@@ -70,36 +70,12 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 
 	//temps
 	geometry_msgs::Twist twist;
-	double v;
-	double omega;
-	double x_Des,y_Des,v_Des,psi_Des,rho_Des; // need to get these values from trajectory generator;
-	double x_PSO,y_PSO,psi_PSO;
-
-	//x_Des = 52.846; // set these via ideal-state generator
-	//y_Des = -9.899;
-	//psi_Des = -0.7106; // 
-	//rho_Des=0; // zero curvature
 
 	//Don't shutdown till the node shuts down
 	while(ros::ok()) {
 		if (!firstCall) // do this only when PSO is warmed up
 		{
-			x_Des = curDesState.des_pose.position.x;
-			y_Des = curDesState.des_pose.position.y;
-			v_Des = curDesState.des_speed;
-			psi_Des = tf::getYaw(curDesState.des_pose.orientation);
-			rho_Des = curDesState.des_rho;
-
-			//Orientation is a quaternion, so need to get yaw angle in rads.. unless you want a quaternion
-			x_PSO = current_odom.pose.pose.position.x;
-			y_PSO = current_odom.pose.pose.position.y;
-			psi_PSO = tf::getYaw(current_odom.pose.pose.orientation);
-
-			steering_algo->computeVelocities(x_PSO,y_PSO,psi_PSO,x_Des,y_Des,v_Des,psi_Des,rho_Des,v,omega);   
-
-			//Put values into twist message
-			twist.linear.x = v;
-			twist.angular.z = omega;
+			steering_algo->computeVelocities(curDesState, current_odom, twist);
 
 			//Publish twist message
 			twist_pub_.publish(twist);

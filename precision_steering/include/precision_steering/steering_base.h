@@ -1,4 +1,7 @@
 #include <ros/ros.h>
+#include <precision_navigation_msgs/DesiredState.h>
+#include <geometry_msgs/Twist.h>
+#include <nav_msgs/Odometry.h>
 
 #ifndef PRECISION_STEERING_STEERING_BASE_H_
 #define PRECISION_STEERING_STEERING_BASE_H_
@@ -15,7 +18,7 @@ namespace precision_steering
 			 * v in meters/sec forwards velocity
 			 * omega in rads/sec
 			 */
-			virtual void computeVelocities(double x_PSO, double y_PSO, double psi_PSO, double x_des, double y_des, double v_des, double psi_des, double rho_des, double &v, double &omega) = 0;
+			virtual void computeVelocities(const precision_navigation_msgs::DesiredState& des_state, const nav_msgs::Odometry& current_odom, geometry_msgs::Twist &command_vel) = 0;
 			virtual ~SteeringBase(){}
 
 		protected:
