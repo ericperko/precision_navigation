@@ -66,6 +66,12 @@ PLUGINLIB_DECLARE_CLASS(precision_steering_algorithms, PhaseSpaceSteering, phase
       ROS_DEBUG("d was %f", d);
       if (des_state.seg_type == precision_navigation_msgs::PathSegment::SPIN_IN_PLACE) {
         double deltaPsi = psi_des - tf::getYaw(current_odom.pose.pose.orientation);
+        while (deltaPsi>pi) {
+          deltaPsi-=2*pi;
+        }
+        while (deltaPsi< -pi) {
+          deltaPsi+=2*pi;
+        }
         ROS_DEBUG("DeltaPSI for spin in place was %f", deltaPsi);
         double omega_cmd = k_psi*deltaPsi + des_state.des_speed;
         command_vel.linear.x = 0.0;
@@ -101,4 +107,4 @@ PLUGINLIB_DECLARE_CLASS(precision_steering_algorithms, PhaseSpaceSteering, phase
         command_vel.angular.z = omega;
       }
     }
-  };
+    };
