@@ -227,10 +227,11 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
   precision_navigation_msgs::PathSegment currentSeg = path_.at(seg_number_);
 
   double vNext;
-  v = currentSeg.max_speeds.linear.x;
   if (currentSeg.seg_type == precision_navigation_msgs::PathSegment::SPIN_IN_PLACE) {
     vNext = 0.0;
+    v = currentSeg.max_speeds.angular.z;
   } else {
+    v = currentSeg.max_speeds.linear.x;
     if (seg_number_ < path_.size()-1) {
       vNext = path_.at(seg_number_+1).max_speeds.linear.x;
     } 
