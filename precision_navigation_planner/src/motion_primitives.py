@@ -17,6 +17,17 @@ class MotionPrimitive:
         self.f_score = None
         self.cost_multiplier = 1.0
 
+    def __eq__(self, other):
+        return self.action == other.action
+
+    def __cmp__(self, other):
+       if self.f_score < other.f_score:
+           return -1
+       elif self.f_score == other.f_score:
+           return 0
+       else:
+           return 1
+
 def calculate_heuristic(a, b):
     """
     Calculate the heuristic value from primitive a to primitive b
@@ -53,9 +64,30 @@ def get_successors(a):
     else:
         print "Get successors not support for seg_type %s" % (seg.seg_type)
         return []
-    #successors.extend(get_line_successors(end_point, end_theta))
+    successors.extend(get_line_successors(end_point, end_theta))
     successors.extend(get_spin_in_place_successors(end_point, end_theta))
     return successors
+
+def get_line_successors(end_point, end_theta):
+    """
+    Given the point & heading where the previous action ended, generate the
+    possible line actions that could start at that point
+    """
+    max_distance = 5.0 #Meters that we will create lines up till
+    num_lines = 50 #Number of lines to create up to the max distance
+    distance_increment = max_distance / num_lines
+    successors = []
+    end_quat = Quaternion(*(tf_math.quaternion_from_euler(0, 0, end_theta,\
+        'sxyz')))
+    for i in range(1, num_lines+1):
+        seg = PathSegment()
+        seg.seg_type = PathSegment.LINE
+        seg.ref_point = end_point
+        seg.init_tan_angle = end_quat
+        seg.seg_length = i * distance_increment
+        successors.append(MotionPrimitive(seg))
+    return successors
+
 
 def get_spin_in_place_successors(end_point, end_theta):
     """
@@ -76,14 +108,14 @@ def get_spin_in_place_successors(end_point, end_theta):
             seg.init_tan_angle = end_quat
             seg.seg_length = i * angle_increment
             seg.curvature = curv
-            successors.append(seg)
+            successors.append(MotionPrimitive(seg))
     seg = PathSegment()
     seg.seg_type = PathSegment.SPIN_IN_PLACE
     seg.ref_point = end_point
     seg.init_tan_angle = end_quat
     seg.seg_length = math.pi
     seg.curvature = curv
-    successors.append(seg)
+    successors.append(MotionPrimitive(seg))
     return successors
 
 
