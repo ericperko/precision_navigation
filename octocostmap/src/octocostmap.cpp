@@ -59,6 +59,7 @@ namespace octocostmap {
     pc_tf_filter_->registerCallback(boost::bind(&OctoCostmap::pointCloudCallback, this, _1));
 
     map_pub_ = nh_.advertise<octomap_ros::OctomapBinary>("octomap", 1, true);
+    viz_point_cloud_pub_ = nh_.advertise<pcl::PointCloud<pcl::PointXYZ> >("octomap_visualization_cloud", 1);
 
     octree_ = boost::shared_ptr<octomap::OcTreeROS>(new octomap::OcTreeROS(map_resolution_));
     ROS_DEBUG("Octocostmap constructed");
@@ -101,6 +102,7 @@ namespace octocostmap {
     insertPointCloudXYZ(cloud);
     ROS_DEBUG("Point cloud callback took %f milliseconds for %d points", (ros::WallTime::now() - start).toSec() * 1000.0, cloud->points.size());
     publishOctomapMsg();
+    publishVisualizationPointCloud();
   }
 
   void OctoCostmap::laserCallback(const sensor_msgs::LaserScan::ConstPtr& scan) {
@@ -136,6 +138,7 @@ namespace octocostmap {
     insertPointCloudXYZ(pcl_cloud);
     ROS_DEBUG("Laser callback took %f milliseconds", (ros::WallTime::now() - start).toSec() * 1000.0);
     publishOctomapMsg();
+    publishVisualizationPointCloud();
   }
 
   void OctoCostmap::publishOctomapMsg() {
@@ -149,6 +152,18 @@ namespace octocostmap {
         ROS_DEBUG("Published an octocostmap");
       }
     }
+  }
+
+  void OctoCostmap::publishVisualizationPointCloud() {
+    if (viz_point_cloud_pub_.getNumSubscribers() > 0) {
+        pcl::PointCloud<pcl::PointXYZ> viz_cloud;
+        viz_cloud.header.frame_id = map_frame_;
+        octomap::point3d_list points;
+        octree_->octree.getOccupied(points);
+        octomap::pointsOctomapToPCL(points, viz_cloud);
+        viz_point_cloud_pub_.publish(viz_cloud);
+        ROS_DEBUG("Published a visualization PointCloud");
+      }
   }
 
   void OctoCostmap::writeBinaryMap(const std::string& filename) {

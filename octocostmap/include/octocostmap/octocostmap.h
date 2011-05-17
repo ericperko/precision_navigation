@@ -71,11 +71,13 @@ namespace octocostmap {
             }
 
             void publishOctomapMsg();
+            void publishVisualizationPointCloud();
         private:
             tf::TransformListener tfl_;
             message_filters::Subscriber<sensor_msgs::LaserScan> laser_sub_;
             message_filters::Subscriber<pcl::PointCloud<pcl::PointXYZ> > pc_sub_;
             ros::Publisher map_pub_;
+            ros::Publisher viz_point_cloud_pub_;
             tf::MessageFilter<sensor_msgs::LaserScan>* laser_tf_filter_;
             tf::MessageFilter<pcl::PointCloud<pcl::PointXYZ> >* pc_tf_filter_;
             ros::NodeHandle nh_;
