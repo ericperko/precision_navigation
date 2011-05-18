@@ -31,7 +31,17 @@ class MotionPrimitive:
         self.cost_multiplier = cost_multiplier
 
     def __eq__(self, other):
-        return self.action == other.action
+        #return self.action == other.action
+        #copying numpy.allclose functionality, absolute(a - b) <= (atol + rtol * absolute(b))
+        atol = 1e-08
+        rtol = 1.0000000000000001e-05
+        self_tuple = get_hash_value_tuple(self.action)
+        other_tuple = get_hash_value_tuple(other.action)
+        for x,y in zip(self_tuple, other_tuple):
+            conditional = (abs(x-y) <= (atol + rtol*abs(y)))
+            if not conditional:
+                return False
+        return True
 
     def __hash__(self):
         return hash(get_hash_value_tuple(self.action))
@@ -46,13 +56,34 @@ def calculate_heuristic(a, b):
     """
     Calculate the heuristic value from primitive a to primitive b
 
-    Currently, this is just the euclidean distance from the end of a to the
-    start of b.
+    Currently, this is the euclidean distance from the end of a to the
+    start of b plus the absolute value of the angular error between the angle
+    we end up at and the angle that b starts at
     """
+    heading_weight = 3.
     end_a = get_endpoint(a)
     if end_a:
-        return math.sqrt((b.action.ref_point.x - end_a.x)**2 + \
+        euclidean_dist = math.sqrt((b.action.ref_point.x - end_a.x)**2 + \
             (b.action.ref_point.y - end_a.y)**2)
+        euclidean_dist_start_a_to_b = math.sqrt((b.action.ref_point.x - \
+            a.action.ref_point.x)**2 + (b.action.ref_point.y - \
+                a.action.ref_point.y)**2)
+        end_theta_a = get_endtheta(a)
+        heading_error = 0.0
+        if euclidean_dist_start_a_to_b < 0.005:
+            #Then we want to prefer something that ends up at b's tan angle
+            b_quat = [b.action.init_tan_angle.x, b.action.init_tan_angle.y, \
+                b.action.init_tan_angle.z, b.action.init_tan_angle.w]
+            b_tan_theta = tf_math.euler_from_quaternion(b_quat)[2]
+            heading_error = b_tan_theta - end_theta_a
+        else:
+            #Prefer something that heads towards b
+            x_diff = b.action.ref_point.x - end_a.x
+            y_diff = b.action.ref_point.y - end_a.y
+            heading_to_b = math.atan2(y_diff, x_diff)
+            heading_error = heading_to_b - end_theta_a
+        heading_dist = abs(heading_error)
+        return euclidean_dist + heading_weight * heading_dist
     else:
         return 1e100000
 
@@ -81,8 +112,25 @@ def get_endpoint(a):
     else:
         return None
 
+def get_endtheta(a):
+    """
+    Get the heading that the action ends at
+    """
+    seg = a.action
+    init_quat = [seg.init_tan_angle.x, seg.init_tan_angle.y, \
+            seg.init_tan_angle.z, seg.init_tan_angle.w]
+    init_tan_theta = tf_math.euler_from_quaternion(init_quat)[2]
+    if seg.seg_type == PathSegment.SPIN_IN_PLACE:
+        end_theta = init_tan_theta + seg.curvature * seg.seg_length
+        return end_theta
+    elif seg.seg_type == PathSegment.LINE:
+        return init_tan_theta
+    else:
+        return None
 
-def get_successors(a):
+
+
+def get_successors(a, goal_prim):
     """
     Get the motion primitives that could come after this one
     """
@@ -101,11 +149,12 @@ def get_successors(a):
     else:
         print "Get successors not support for seg_type %s" % (seg.seg_type)
         return []
-    successors.extend(get_line_successors(end_point, end_theta))
-    successors.extend(get_spin_in_place_successors(end_point, end_theta))
+    successors.extend(get_line_successors(end_point, end_theta, goal_prim))
+    successors.extend(get_spin_in_place_successors(end_point, end_theta, \
+        goal_prim))
     return successors
 
-def get_line_successors(end_point, end_theta):
+def get_line_successors(end_point, end_theta, goal_prim):
     """
     Given the point & heading where the previous action ended, generate the
     possible line actions that could start at that point
@@ -123,10 +172,19 @@ def get_line_successors(end_point, end_theta):
         seg.init_tan_angle = end_quat
         seg.seg_length = i * distance_increment
         successors.append(MotionPrimitive(seg))
+
+    #Generate a line seg with length exactly the distance to the goal
+    len_to_goal = math.sqrt((goal_prim.action.ref_point.x - end_point.x)**2 +\
+            (goal_prim.action.ref_point.y - end_point.y)**2)
+    seg = PathSegment()
+    seg.seg_type = PathSegment.LINE
+    seg.ref_point = end_point
+    seg.init_tan_angle = end_quat
+    seg.seg_length = len_to_goal
+    successors.append(MotionPrimitive(seg))
     return successors
 
-
-def get_spin_in_place_successors(end_point, end_theta):
+def get_spin_in_place_successors(end_point, end_theta, goal_prim):
     """
     Given the point & heading where the previous action ended, generate the
     possible spin in places that could happen at that point
@@ -153,6 +211,37 @@ def get_spin_in_place_successors(end_point, end_theta):
     seg.init_tan_angle = end_quat
     seg.seg_length = math.pi
     seg.curvature = curv
+    successors.append(MotionPrimitive(seg))
+
+    #Get a spin that is exactly pointed towards the goal from here
+    y_diff = goal_prim.action.ref_point.y - end_point.y
+    x_diff = goal_prim.action.ref_point.x - end_point.x
+    heading_diff_here_to_there = math.atan2(y_diff, x_diff)
+    seg = PathSegment()
+    seg.seg_type= PathSegment.SPIN_IN_PLACE
+    seg.ref_point = end_point
+    seg.init_tan_angle = end_quat
+    seg.seg_length = abs(heading_diff_here_to_there)
+    seg.curvature = math.copysign(1.0, heading_diff_here_to_there)
+    successors.append(MotionPrimitive(seg))
+
+    #Get a spin that is exactly pointed along the goal's heading from here
+    goal_quat = [goal_prim.action.init_tan_angle.x,
+            goal_prim.action.init_tan_angle.y,
+            goal_prim.action.init_tan_angle.z,
+            goal_prim.action.init_tan_angle.w]
+    goal_theta = tf_math.euler_from_quaternion(goal_quat)[2]
+    heading_error = goal_theta - end_theta
+    while heading_error > math.pi:
+        heading_error -= math.pi*2
+    while heading_error < -math.pi:
+        heading_error += math.pi*2
+    seg = PathSegment()
+    seg.seg_type= PathSegment.SPIN_IN_PLACE
+    seg.ref_point = end_point
+    seg.init_tan_angle = end_quat
+    seg.seg_length = abs(heading_error)
+    seg.curvature = math.copysign(1.0, heading_error)
     successors.append(MotionPrimitive(seg))
     return successors
 

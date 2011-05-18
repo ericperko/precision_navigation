@@ -48,11 +48,13 @@ class Planner:
             if x == goal_prim:
                 #This is the goal, so break out by returning the path
                 return self.rebuild_path(x)
+            #print "%f: %s" % (self.f_score[x], x)
+            #import pdb; pdb.set_trace()
             if (time.time() - start_time) > self.max_duration:
                 print "Couldn't find path in %f seconds" % (self.max_duration)
                 return None
             self.closedset.append(x)
-            succs = motion_primitives.get_successors(x)
+            succs = motion_primitives.get_successors(x, goal_prim)
             for y in succs:
                 if y in self.closedset:
                     continue
