@@ -1,0 +1,16 @@
+<package>
+  <description brief="precision_steering_tests">
+
+     precision_steering_tests
+
+  </description>
+  <author>Eric Perko</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/precision_steering_tests</url>
+  <depend package="precision_steering"/>
+  <depend package="stage" />
+
+</package>
+
+
