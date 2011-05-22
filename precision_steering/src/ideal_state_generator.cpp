@@ -34,6 +34,9 @@ class IdealStateGenerator {
     double seg_length_done_;
     uint32_t seg_number_;
 
+    //Whether or not to do collision checking
+    bool check_for_collisions_;
+
     //Current path to be working on
     std::vector<precision_navigation_msgs::PathSegment> path_;
 
@@ -55,6 +58,7 @@ class IdealStateGenerator {
 };
 
 IdealStateGenerator::IdealStateGenerator(): 
+  check_for_collisions_(true),
   action_name_("execute_path"), 
   as_(nh_, action_name_, false)
 {
@@ -63,8 +67,12 @@ IdealStateGenerator::IdealStateGenerator():
   ideal_pose_marker_pub_= nh_.advertise<geometry_msgs::PoseStamped>("ideal_pose",1);   
   nh_.param("loop_rate",loop_rate_,20.0); // default 20Hz
   dt_ = 1.0/loop_rate_;
-  costmap_ = boost::shared_ptr<octocostmap::Costmap3D>(new octocostmap::Costmap3D("octocostmap", tf_listener_));
-
+  nh_.param("check_for_collisions", check_for_collisions_, true);
+  if (check_for_collisions_) {
+    costmap_ = boost::shared_ptr<octocostmap::Costmap3D>(new octocostmap::Costmap3D("octocostmap", tf_listener_));
+  } else {
+    ROS_WARN("Collision checking disabled by parameter. Robot may be unsafe");
+  }
   //Setup the loop timer
   compute_loop_timer_ = nh_.createTimer(ros::Duration(dt_), boost::bind(&IdealStateGenerator::computeStateLoop, this, _1));
 
@@ -143,38 +151,44 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
 }
 
 bool IdealStateGenerator::checkCollisions(bool checkEntireVolume, const precision_navigation_msgs::DesiredState& des_state) {
-  geometry_msgs::PoseStamped origin, origin_des_frame;
-  origin_des_frame.header = des_state.header;
-  /*origin_des_frame.header.frame_id = std::string("base_link");
-    origin_des_frame.point.x = 0.0;
-    origin_des_frame.point.y = 0.0;
-    origin_des_frame.point.z = 0.0; */
-  origin_des_frame.pose = des_state.des_pose;
-  try {
-    /*tf_listener_.transformPose("base_link", origin_des_frame, origin);
-      origin.pose.position.x += -0.711;
-      origin.pose.position.y += -0.3048;
-      origin.pose.position.z += 0.0; */
-    double width = 0.6096;
-    double length = 1.422;
-    double height = 2.00;
-    tf::Stamped<tf::Pose > tf_origin;
-    tf::poseStampedMsgToTF(origin_des_frame, tf_origin);
-    tf::Pose shift_amount(tf::createQuaternionFromYaw(0.0), tf::Vector3(-length/2., -width/2., 0.));
-    tf_origin.setData(tf_origin * shift_amount);
-    tf::poseStampedTFToMsg(tf_origin, origin);
-    double resolution = 0.05;
-    ROS_DEBUG_STREAM("origin: " << origin);
-    bool collision_detected = costmap_->checkRectangularPrismBase(origin, width, height, length, resolution, checkEntireVolume);
-    if (collision_detected) {
-      ROS_WARN("collision_detected");
+  if (check_for_collisions_) {
+    geometry_msgs::PoseStamped origin, origin_des_frame;
+    origin_des_frame.header = des_state.header;
+    /*origin_des_frame.header.frame_id = std::string("base_link");
+      origin_des_frame.point.x = 0.0;
+      origin_des_frame.point.y = 0.0;
+      origin_des_frame.point.z = 0.0; */
+    origin_des_frame.pose = des_state.des_pose;
+    try {
+      /*tf_listener_.transformPose("base_link", origin_des_frame, origin);
+        origin.pose.position.x += -0.711;
+        origin.pose.position.y += -0.3048;
+        origin.pose.position.z += 0.0; */
+      double width = 0.6096;
+      double length = 1.422;
+      double height = 2.00;
+      tf::Stamped<tf::Pose > tf_origin;
+      tf::poseStampedMsgToTF(origin_des_frame, tf_origin);
+      tf::Pose shift_amount(tf::createQuaternionFromYaw(0.0), tf::Vector3(-length/2., -width/2., 0.));
+      tf_origin.setData(tf_origin * shift_amount);
+      tf::poseStampedTFToMsg(tf_origin, origin);
+      double resolution = 0.05;
+      ROS_DEBUG_STREAM("origin: " << origin);
+      bool collision_detected = costmap_->checkRectangularPrismBase(origin, width, height, length, resolution, checkEntireVolume);
+      if (collision_detected) {
+        ROS_WARN("collision_detected");
+        return true;
+      } else {
+        return false;
+      }
+    } catch (tf::TransformException ex) {
+      ROS_ERROR("%s", ex.what());
       return true;
-    } else {
-      return false;
     }
-  } catch (tf::TransformException ex) {
-    ROS_ERROR("%s", ex.what());
-    return true;
+  }
+  else {
+    ROS_DEBUG("Not checking for collisions, so let any desired state pass");
+    return false;
   }
 }
 
