@@ -25,7 +25,8 @@ class PrecisionSteering {
 		double loop_rate;
 
 		//put gains here in whatever type you need (int, double, etc) (though more descriptive names than k would make me happier)
-		bool firstCall;
+		bool got_odom_;
+                bool got_cur_des_state_;
 		double x_init,y_init,psi_init;
 
 		//ROS communcators
@@ -38,7 +39,10 @@ class PrecisionSteering {
 };
 
 
-PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
+PrecisionSteering::PrecisionSteering() : got_odom_(false),
+                        got_cur_des_state_(false),
+                        priv_nh_("~") 
+{
 	//Read parameters from the ROS parameter server, defaulting to value if the parameter is not there
 	priv_nh_.param("loop_rate", loop_rate, 20.0);
 	std::string steering_algo_name;
@@ -56,8 +60,6 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 		ROS_ERROR("Failed to create the steering algorithm due to a plugin loading error. Error: %s", ex.what());
 		exit(0);
 	}
-
-	firstCall=true;
 	//Subscribe to Odometry Topic
 	odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odometry", 10, &PrecisionSteering::odomCallback, this); 
 	desState_sub_ = nh_.subscribe<precision_navigation_msgs::DesiredState>("idealState", 10, &PrecisionSteering::desStateCallback, this);
@@ -73,7 +75,7 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 
 	//Don't shutdown till the node shuts down
 	while(ros::ok()) {
-		if (!firstCall) // do this only when PSO is warmed up
+		if (got_odom_ && got_cur_des_state_) // do this only when PSO is warmed up
 		{
 			steering_algo->computeVelocities(curDesState, current_odom, twist);
 
@@ -94,9 +96,9 @@ PrecisionSteering::PrecisionSteering() : priv_nh_("~") {
 
 void PrecisionSteering::odomCallback(const nav_msgs::Odometry::ConstPtr& odom) {
 	current_odom = *odom;
-	if (firstCall)
+	if (!got_odom_)
 	{
-		firstCall=false;
+		got_odom_=true;
 		x_init=  current_odom.pose.pose.position.x;
 		y_init = current_odom.pose.pose.position.y;
 		psi_init = tf::getYaw(current_odom.pose.pose.orientation);
@@ -106,6 +108,9 @@ void PrecisionSteering::odomCallback(const nav_msgs::Odometry::ConstPtr& odom) {
 void PrecisionSteering::desStateCallback(const precision_navigation_msgs::DesiredState::ConstPtr& desState)
 {
 	curDesState= *desState;
+        if (!got_cur_des_state_) {
+                got_cur_des_state_ = true;
+        }
 }
 
 PrecisionSteering::~PrecisionSteering() {
