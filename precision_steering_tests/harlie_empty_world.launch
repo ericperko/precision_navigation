@@ -2,6 +2,7 @@
     <!-- Make ROS use simulator time instead of current clock time -->
     <param name="/use_sim_time" value="true" />
 
-    <!-- Startup the Stage simulator on the 2nd floor -->
-    <node pkg="stage" type="stageros" name="stageros" args="$(find precision_steering_tests)/harlie_empty_world.world" respawn="false" /> 
+    <node name="gazebo" pkg="gazebo" type="gazebo" args="$(find precision_steering_tests)/empty_world_1000hz.world" output="screen" />
+ 
+    <include file="$(find cwru_sim_gazebo)/spawn_harlie.launch" />
 </launch>

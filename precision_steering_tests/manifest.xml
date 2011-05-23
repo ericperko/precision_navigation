@@ -9,7 +9,8 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/precision_steering_tests</url>
   <depend package="precision_steering"/>
-  <depend package="stage" />
+  <depend package="rospy" />
+  <depend package="gazebo" />
 
 </package>
 
