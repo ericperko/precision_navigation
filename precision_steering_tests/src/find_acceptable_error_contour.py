@@ -53,7 +53,6 @@ class FindErrorContour:
         i = 0
         while not rospy.is_shutdown():
             self.reset_pub.publish(reset_state.pose)
-            self.action_client.cancel_goal()
             rospy.sleep(0.1)
             i+=1
             if i > 10:
@@ -72,7 +71,7 @@ class FindErrorContour:
         tangential_distance = msg.pose.pose.position.x
         if tangential_distance < self.min_x:
             self.min_x = tangential_distance
-        if lateral_distance < ERROR_MAX:
+        if abs(lateral_distance) < ERROR_MAX:
             self.output_file.write("%f\n" % (tangential_distance - self.min_x))
             self.sample_done = True
 
@@ -93,6 +92,8 @@ class FindErrorContour:
 
 if __name__ == "__main__":
     rospy.init_node("find_acceptable_error_contour")
+    #offsets = [3,-3]
+    #angles = [0]
     offsets = numpy.linspace(-3, 3, 30) #Steps of 2.5cm are 240
     angles = numpy.linspace(-math.pi,math.pi, 36) #5 degree increments is 72
     with open("find_error_contours.csv", "w") as f:
