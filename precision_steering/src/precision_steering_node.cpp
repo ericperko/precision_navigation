@@ -7,6 +7,7 @@
 #include <pluginlib/class_loader.h>
 #include <precision_steering/steering_base.h>
 #include <string>
+#include <std_srvs/Empty.h>
 
 class PrecisionSteering {
 	public:
@@ -16,6 +17,7 @@ class PrecisionSteering {
 		//callback to put odometry information into the class 
 		void odomCallback(const nav_msgs::Odometry::ConstPtr& odom);	
 		void desStateCallback(const precision_navigation_msgs::DesiredState::ConstPtr& desState);
+                bool enableCommandsCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
 		//last updated Odometry information
 		nav_msgs::Odometry current_odom;
@@ -28,6 +30,7 @@ class PrecisionSteering {
 		bool got_odom_;
                 bool got_cur_des_state_;
 		double x_init,y_init,psi_init;
+                bool enable_commands_;
 
 		//ROS communcators
 		ros::NodeHandle nh_;
@@ -35,12 +38,14 @@ class PrecisionSteering {
 		ros::Subscriber odom_sub_;
 		ros::Subscriber desState_sub_;
 		ros::Publisher twist_pub_;
+                ros::ServiceServer estop_server_;
 
 };
 
 
 PrecisionSteering::PrecisionSteering() : got_odom_(false),
                         got_cur_des_state_(false),
+                        enable_commands_(true),
                         priv_nh_("~") 
 {
 	//Read parameters from the ROS parameter server, defaulting to value if the parameter is not there
@@ -67,6 +72,9 @@ PrecisionSteering::PrecisionSteering() : got_odom_(false),
 	//Setup velocity publisher
 	twist_pub_ = nh_.advertise<geometry_msgs::Twist>("cmd_vel", 1); 
 
+        //Make the estop server
+        estop_server_ = nh_.advertiseService("toggle_steering_commands", &PrecisionSteering::enableCommandsCallback, this);
+
 	//Setup the rate limiter
 	ros::Rate rate(loop_rate);
 
@@ -80,6 +88,10 @@ PrecisionSteering::PrecisionSteering() : got_odom_(false),
 			steering_algo->computeVelocities(curDesState, current_odom, twist);
 
 			//Publish twist message
+                        if (!enable_commands_) {
+                                twist.linear.x = 0.0;
+                                twist.angular.z = 0.0;
+                        }
 			twist_pub_.publish(twist);
                         ROS_DEBUG("Sent a twist message with x velocity of %f and omega of %f", twist.linear.x, twist.angular.z);
 		}
@@ -114,6 +126,10 @@ void PrecisionSteering::desStateCallback(const precision_navigation_msgs::Desire
         }
 }
 
+bool PrecisionSteering::enableCommandsCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp) {
+        enable_commands_ = !enable_commands_;
+        return true;
+}
 PrecisionSteering::~PrecisionSteering() {
 }
 

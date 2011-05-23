@@ -11,6 +11,7 @@
   <depend package="tf"/>
   <depend package="nav_msgs"/>
   <depend package="std_msgs"/>
+  <depend package="std_srvs" />
   <depend package="geometry_msgs"/>
   <depend package="precision_navigation_msgs"/>
   <depend package="octocostmap" />

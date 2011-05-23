@@ -147,7 +147,7 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
     }
   } else {
     ROS_DEBUG("No active goal, so sending last desired state");
-    desiredState_ = makeHaltState(true);
+    desiredState_ = makeHaltState(false);
   }
 
   //Publish desired state

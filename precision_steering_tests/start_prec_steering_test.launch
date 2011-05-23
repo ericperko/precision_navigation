@@ -1,0 +1,28 @@
+<launch>
+
+<!-- Setup the debugging prefix -->
+<arg name="debug" default="false"/>
+<arg if="$(arg debug)" name="launch_prefix" value="xterm -rv -e gdb -ex run -args"/>
+<arg unless="$(arg debug)" name="launch_prefix" value=""/>
+
+<node name="precision_steering" pkg="precision_steering" type="steering_controller" output="screen" launch-prefix="$(arg launch_prefix)" >
+	<remap from="odometry" to="/odom" />
+	<param name="loop_rate" value="20.0" />
+	<param name="k_v" value="0.1" />
+	<param name="k_psi" value="1.0" />
+	<param name="convergence_rate" value="0.8" />
+	<param name="omega_cmd_sat" value="2.0" />
+	<param name="phase_space_slope" value="-1.0" />
+	<param name="steering_algorithm" value="precision_steering_algorithms/PhaseSpaceSteering" />
+</node>
+
+<node name="ideal_state_gen" pkg="precision_steering" type="ideal_state_generator" launch-prefix="$(arg launch_prefix)" >
+	<param name="loop_rate" value="20.0" />
+	<param name="check_for_collisions" value="false" />
+</node>
+
+<node name="fake_localization" pkg="fake_localization" type="fake_localization">
+	<remap from="base_pose_ground_truth" to="odom" />
+</node>
+
+</launch>
