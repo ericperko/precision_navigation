@@ -81,6 +81,7 @@ PrecisionSteering::PrecisionSteering() : got_odom_(false),
 
 			//Publish twist message
 			twist_pub_.publish(twist);
+                        ROS_DEBUG("Sent a twist message with x velocity of %f and omega of %f", twist.linear.x, twist.angular.z);
 		}
 		//Make sure this node's ROS stuff gets to run if we are hogging CPU
 		ros::spinOnce();

@@ -45,6 +45,7 @@ class IdealStateGenerator {
 
     //ROS communcators
     ros::NodeHandle nh_;
+    ros::NodeHandle priv_nh_;
     ros::Publisher ideal_state_pub_;
     ros::Publisher ideal_pose_marker_pub_;
     ros::Subscriber path_sub_;
@@ -59,30 +60,37 @@ class IdealStateGenerator {
 
 IdealStateGenerator::IdealStateGenerator(): 
   check_for_collisions_(true),
+  priv_nh_("~"),
   action_name_("execute_path"), 
   as_(nh_, action_name_, false)
 {
   //Setup the ideal state pub
   ideal_state_pub_= nh_.advertise<precision_navigation_msgs::DesiredState>("idealState",1);   
   ideal_pose_marker_pub_= nh_.advertise<geometry_msgs::PoseStamped>("ideal_pose",1);   
-  nh_.param("loop_rate",loop_rate_,20.0); // default 20Hz
+  priv_nh_.param("loop_rate",loop_rate_,20.0); // default 20Hz
   dt_ = 1.0/loop_rate_;
-  nh_.param("check_for_collisions", check_for_collisions_, true);
+  priv_nh_.param("check_for_collisions", check_for_collisions_, true);
   if (check_for_collisions_) {
     costmap_ = boost::shared_ptr<octocostmap::Costmap3D>(new octocostmap::Costmap3D("octocostmap", tf_listener_));
   } else {
     ROS_WARN("Collision checking disabled by parameter. Robot may be unsafe");
   }
-  //Setup the loop timer
-  compute_loop_timer_ = nh_.createTimer(ros::Duration(dt_), boost::bind(&IdealStateGenerator::computeStateLoop, this, _1));
-
-  //Initialze private class variables
+    //Initialze private class variables
   seg_number_ = 0;
   seg_length_done_ = 0.0;
 
-  tf_listener_.waitForTransform("odom", "map", ros::Time::now(), ros::Duration(10));
-  tf_listener_.waitForTransform("odom", "base_link", ros::Time::now(), ros::Duration(10));
+  while (!tf_listener_.waitForTransform("odom", "map", ros::Time::now(), ros::Duration(10)) && ros::ok()) {
+    ROS_WARN("Waiting for odom to map transform");
+    ros::spinOnce();
+  }
+  while (!tf_listener_.waitForTransform("odom", "base_link", ros::Time::now(), ros::Duration(10)) && ros::ok()) {
+    ROS_WARN("Waiting for odom to base_link transform");
+    ros::spinOnce();
+  }
   desiredState_ = makeHaltState(false);
+
+  //Setup the loop timer
+  compute_loop_timer_ = nh_.createTimer(ros::Duration(dt_), boost::bind(&IdealStateGenerator::computeStateLoop, this, _1));
 
   as_.registerGoalCallback(boost::bind(&IdealStateGenerator::newPathCallback, this));
   as_.registerPreemptCallback(boost::bind(&IdealStateGenerator::preemptPathCallback, this));
