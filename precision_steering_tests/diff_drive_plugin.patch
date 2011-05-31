@@ -1,0 +1,70 @@
+Index: include/erratic_gazebo_plugins/diffdrive_plugin.h
+===================================================================
+--- include/erratic_gazebo_plugins/diffdrive_plugin.h	(revision 1304)
++++ include/erratic_gazebo_plugins/diffdrive_plugin.h	(working copy)
+@@ -94,6 +94,7 @@
+   ros::NodeHandle* rosnode_;
+   ros::Publisher pub_;
+   ros::Subscriber sub_;
++  ros::Subscriber reset_sub_;
+   tf::TransformBroadcaster *transform_broadcaster_;
+   nav_msgs::Odometry odom_;
+   std::string tf_prefix_;
+@@ -113,6 +114,7 @@
+ 
+   // DiffDrive stuff
+   void cmdVelCallback(const geometry_msgs::Twist::ConstPtr& cmd_msg);
++  void resetCallback(const geometry_msgs::Pose::ConstPtr& cmd_msg);
+ 
+   float x_;
+   float rot_;
+Index: src/diffdrive_plugin.cpp
+===================================================================
+--- src/diffdrive_plugin.cpp	(revision 1304)
++++ src/diffdrive_plugin.cpp	(working copy)
+@@ -145,7 +145,12 @@
+       ros::SubscribeOptions::create<geometry_msgs::Twist>(topicName, 1,
+                                                           boost::bind(&DiffDrivePlugin::cmdVelCallback, this, _1),
+                                                           ros::VoidPtr(), &queue_);
++  ros::SubscribeOptions reset_so = 
++    ros::SubscribeOptions::create<geometry_msgs::Pose>("/reset_pose", 1,
++                                                          boost::bind(&DiffDrivePlugin::resetCallback, this, _1),
++                                                          ros::VoidPtr(), &queue_);
+   sub_ = rosnode_->subscribe(so);
++  reset_sub_ = rosnode_->subscribe(reset_so);
+   pub_ = rosnode_->advertise<nav_msgs::Odometry>("odom", 1);
+ }
+ 
+@@ -290,7 +295,24 @@
+ 
+   //std::cout << "END CALLBACK\n";
+ }
++  
++void DiffDrivePlugin::resetCallback(const geometry_msgs::Pose::ConstPtr& cmd_msg) {
+ 
++  lock.lock();
++
++  odomPose[0] = cmd_msg->position.x;
++  odomPose[1] = cmd_msg->position.y;
++  odomPose[2] = tf::getYaw(cmd_msg->orientation);
++  
++  ROS_INFO("Reset diff_drive_plugin pose to %f, %f, %f", odomPose[0], odomPose[1], odomPose[2]);
++
++  odomVel[0] = 0.0;
++  odomVel[1] = 0.0;
++  odomVel[2] = 0.0;
++
++  lock.unlock();
++}
++
+ // NEW: custom callback queue thread
+ void DiffDrivePlugin::QueueThread()
+ {
+@@ -357,6 +379,7 @@
+   pos_iface_->data->pose.pos.y = odomPose[1];
+   pos_iface_->data->pose.yaw = NORMALIZE(odomPose[2]);
+ 
++
+   pos_iface_->data->velocity.pos.x = odomVel[0];
+   pos_iface_->data->velocity.yaw = odomVel[2];
+ 
