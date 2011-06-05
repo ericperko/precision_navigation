@@ -94,12 +94,16 @@ if __name__ == "__main__":
     rospy.init_node("find_acceptable_error_contour")
     #offsets = [3,-3]
     #angles = [0]
-    offsets = numpy.linspace(-3, 3, 30) #Steps of 2.5cm are 240
-    angles = numpy.linspace(-math.pi,math.pi, 36) #5 degree increments is 72
-    with open("find_error_contours.csv", "w") as f:
+    offsets = numpy.linspace(-0.5, 0.5, 100) #Steps of 2.5cm are 240
+    angles = numpy.linspace(-math.pi,math.pi, 180) #5 degree increments is 72
+    with open("find_error_contours_near_0_0.csv", "w") as f:
         fec = FindErrorContour(f)
         for offset in offsets:
             for angle in angles:
                 fec.reset_harlie_state(0,offset, angle)
                 while not fec.sample_done:
                     rospy.sleep(0.01)
+        for angle in angles:
+            fec.reset_harlie_state(0,0.0,angle)
+            while not fec.sample_done:
+                rospy.sleep(0.01)
