@@ -19,7 +19,7 @@
 
 geometry_msgs::Point getStartPoint(const precision_navigation_msgs::PathSegment& seg);
 
-void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path visualization_path);
+void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path& visualization_path);
 
 class IdealStateGenerator {
   public:
@@ -544,7 +544,7 @@ void IdealStateGenerator::preemptPathCallback() {
   as_.setPreempted();
 }
 
-void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path visualization_path) {
+void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path& visualization_path) {
   uint8_t num_samples = 50;
   visualization_path.poses.clear();
   visualization_path.header.stamp = ros::Time::now();
