@@ -9,10 +9,17 @@
 #include <precision_navigation_msgs/Path.h>
 #include <actionlib/server/simple_action_server.h>
 #include <precision_navigation_msgs/ExecutePathAction.h>
+#include <nav_msgs/Path.h>
 #include <octocostmap/costmap_3d.h>
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <boost/thread.hpp>
+#include <boost/foreach.hpp>
+
+geometry_msgs::Point getStartPoint(const precision_navigation_msgs::PathSegment& seg);
+
+void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path visualization_path);
 
 class IdealStateGenerator {
   public:
@@ -25,6 +32,7 @@ class IdealStateGenerator {
     void preemptPathCallback();
     precision_navigation_msgs::DesiredState makeHaltState(bool command_last_state);
     void computeStateLoop(const ros::TimerEvent& event);
+    void splicePath(const ros::TimerEvent& event);
     bool checkCollisions(bool checkEntireVolume, const precision_navigation_msgs::DesiredState& des_state);
 
     //Loop rate in Hz
@@ -37,8 +45,14 @@ class IdealStateGenerator {
     //Whether or not to do collision checking
     bool check_for_collisions_;
 
+    //Whether or not to actually bother splicing
+    bool use_splicing_;
+    //Time that we have to wait before splicing in something to fix up the path.
+    ros::Duration time_until_splice_;
+
     //Current path to be working on
     std::vector<precision_navigation_msgs::PathSegment> path_;
+    boost::recursive_mutex path_lock_;
 
     //The last desired state we output	
     precision_navigation_msgs::DesiredState desiredState_;
@@ -48,11 +62,12 @@ class IdealStateGenerator {
     ros::NodeHandle priv_nh_;
     ros::Publisher ideal_state_pub_;
     ros::Publisher ideal_pose_marker_pub_;
-    ros::Subscriber path_sub_;
+    ros::Publisher path_visualizer_pub_;
     tf::TransformListener tf_listener_;	
     geometry_msgs::PoseStamped temp_pose_in_, temp_pose_out_;
     boost::shared_ptr<octocostmap::Costmap3D> costmap_;
     ros::Timer compute_loop_timer_;
+    ros::Timer splicing_timer_;
     std::string action_name_;
     actionlib::SimpleActionServer<precision_navigation_msgs::ExecutePathAction> as_;
     precision_navigation_msgs::ExecutePathFeedback feedback_;
@@ -60,6 +75,7 @@ class IdealStateGenerator {
 
 IdealStateGenerator::IdealStateGenerator(): 
   check_for_collisions_(true),
+  use_splicing_(false),
   priv_nh_("~"),
   action_name_("execute_path"), 
   as_(nh_, action_name_, false)
@@ -67,15 +83,25 @@ IdealStateGenerator::IdealStateGenerator():
   //Setup the ideal state pub
   ideal_state_pub_= nh_.advertise<precision_navigation_msgs::DesiredState>("idealState",1);   
   ideal_pose_marker_pub_= nh_.advertise<geometry_msgs::PoseStamped>("ideal_pose",1);   
+  path_visualizer_pub_ = nh_.advertise<nav_msgs::Path>("path_visualization", 1, true);
   priv_nh_.param("loop_rate",loop_rate_,20.0); // default 20Hz
   dt_ = 1.0/loop_rate_;
+  priv_nh_.param("use_splicing", use_splicing_, false);
+  double time_to_splice;
+  priv_nh_.param("time_until_splice", time_to_splice, 15.0);
+  time_until_splice_ = ros::Duration(time_to_splice);
   priv_nh_.param("check_for_collisions", check_for_collisions_, true);
   if (check_for_collisions_) {
     costmap_ = boost::shared_ptr<octocostmap::Costmap3D>(new octocostmap::Costmap3D("octocostmap", tf_listener_));
   } else {
     ROS_WARN("Collision checking disabled by parameter. Robot may be unsafe");
   }
-    //Initialze private class variables
+
+  if (!check_for_collisions_ && use_splicing_) {
+    ROS_WARN("Collison checking disabled but splicing requested. Impossible to do, so setting splicing to false");
+    use_splicing_ = false;
+  }
+  //Initialze private class variables
   seg_number_ = 0;
   seg_length_done_ = 0.0;
 
@@ -141,8 +167,16 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
     if(!checkCollisions(false, new_desired_state)) {
       ROS_DEBUG("No collision detected. Passing on current desired state");
       desiredState_ = new_desired_state;
+      if (use_splicing_) {
+        ROS_DEBUG("Cancelling any previously setup splicing timers");
+        splicing_timer_.stop();
+      }
     } else {
       ROS_DEBUG("Collision detected. Commanding current position");
+      if (use_splicing_) {
+        ROS_DEBUG("Setup a splicing timer");
+        splicing_timer_ = priv_nh_.createTimer(time_until_splice_, boost::bind(&IdealStateGenerator::splicePath, this, _1), true);
+      }
       desiredState_ = makeHaltState(false); 
     }
   } else {
@@ -202,6 +236,7 @@ bool IdealStateGenerator::checkCollisions(bool checkEntireVolume, const precisio
 
 bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& new_des_state)
 {
+  boost::recursive_mutex::scoped_lock(path_lock_);
   double v = 0.0;
   bool end_of_path = false;
   double dL = desiredState_.des_speed * dt_;
@@ -365,11 +400,143 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
   return should_halt;
 }
 
+void IdealStateGenerator::splicePath(const ros::TimerEvent& event) {
+  boost::recursive_mutex::scoped_lock(path_lock_);
+
+  //first make sure we are still in collision
+  if (checkCollisions(false, desiredState_)) {
+    std::vector<precision_navigation_msgs::PathSegment> path_to_insert;
+
+    //Now to monkey with the path...
+    precision_navigation_msgs::PathSegment current_segment = path_.at(seg_number_);
+    precision_navigation_msgs::PathSegment next_seg = path_.at(seg_number_ + 1);
+    current_segment.seg_length = seg_length_done_; //shorten up the current segment's length
+    path_.at(seg_number_) = current_segment;
+    geometry_msgs::PoseStamped current_position;
+    current_position.header.frame_id = "base_link";
+    current_position.pose.position.x = 0.0;
+    current_position.pose.position.y = 0.0;
+    current_position.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
+    ros::Time current_transform = ros::Time::now();
+    tf_listener_.getLatestCommonTime(current_position.header.frame_id, current_segment.header.frame_id, current_transform, NULL);
+    current_position.header.stamp = current_transform;
+    tf_listener_.transformPose(current_segment.header.frame_id, current_position, current_position);
+
+    //add a spin in place from current position to +pi/2 rads
+    precision_navigation_msgs::PathSegment first_spin;
+    first_spin.header.frame_id = current_segment.header.frame_id;
+    first_spin.seg_type = precision_navigation_msgs::PathSegment::SPIN_IN_PLACE;
+    first_spin.ref_point = current_position.pose.position;
+    first_spin.init_tan_angle = current_position.pose.orientation;
+    first_spin.curvature = 1.0;
+    first_spin.seg_length = M_PI/2.;
+    first_spin.max_speeds.linear.x = 0.0;
+    first_spin.max_speeds.angular.z = 1.0;
+    first_spin.accel_limit = 0.1;
+    first_spin.decel_limit = 0.1;
+    path_to_insert.push_back(first_spin);
+
+    //Our representative splice is an arc that is 180 degrees with a 2 foot radius
+    double arc_radius = 0.61; //61cm
+    precision_navigation_msgs::PathSegment splice_arc;
+    splice_arc.header.frame_id = current_segment.header.frame_id;
+    splice_arc.seg_type = precision_navigation_msgs::PathSegment::ARC;
+    geometry_msgs::PoseStamped arc_center;
+    arc_center.header.frame_id = "base_link";
+    arc_center.header.stamp = current_transform;
+    arc_center.pose.position.x = arc_radius;
+    arc_center.pose.position.y = 0.0;
+    //Actually the init tan angle, but might as well transform it at the same time...
+    arc_center.pose.orientation = tf::createQuaternionMsgFromYaw(M_PI/2.);
+    tf_listener_.transformPose(current_segment.header.frame_id, arc_center, arc_center);
+    splice_arc.ref_point = arc_center.pose.position;
+    splice_arc.init_tan_angle = arc_center.pose.orientation;
+    splice_arc.curvature = -1./arc_radius; //it's an arc to the right, so negative curvature
+    splice_arc.seg_length = fabs(M_PI / splice_arc.curvature); 
+    splice_arc.max_speeds.linear.x = 0.5;
+    splice_arc.accel_limit = 0.2;
+    splice_arc.decel_limit = 0.2;
+    path_to_insert.push_back(splice_arc);
+
+    //Add a spin in place at the end of the arc back to the start heading
+    precision_navigation_msgs::PathSegment final_spin;
+    final_spin.header.frame_id = current_segment.header.frame_id;
+    final_spin.seg_type = precision_navigation_msgs::PathSegment::SPIN_IN_PLACE;
+    geometry_msgs::PoseStamped end_pose;
+    end_pose.header.frame_id = "base_link";
+    end_pose.header.stamp = current_transform;
+    end_pose.pose.position.x = 2*arc_radius;
+    end_pose.pose.position.y = 0.0;
+    end_pose.pose.orientation = tf::createQuaternionMsgFromYaw(-M_PI/2.);
+    tf_listener_.transformPose(current_segment.header.frame_id, end_pose, end_pose);
+    final_spin.ref_point = end_pose.pose.position;
+    final_spin.init_tan_angle = end_pose.pose.orientation;
+    final_spin.curvature = 1.0;
+    final_spin.seg_length = M_PI/2.;
+    final_spin.max_speeds.linear.x = 0.0;
+    final_spin.max_speeds.angular.z = 1.0;
+    final_spin.accel_limit = 0.1;
+    final_spin.decel_limit = 0.1;
+    path_to_insert.push_back(final_spin);
+
+    //Insert a straight line from here to the next segment
+    precision_navigation_msgs::PathSegment line_to_next_seg;
+    line_to_next_seg.header.frame_id = current_segment.header.frame_id;
+    line_to_next_seg.seg_type = precision_navigation_msgs::PathSegment::LINE;
+    line_to_next_seg.ref_point = end_pose.pose.position;
+    line_to_next_seg.init_tan_angle = current_position.pose.orientation;
+    line_to_next_seg.curvature = 0.0;
+    geometry_msgs::Point next_seg_start = getStartPoint(next_seg);
+    double x_diff = (next_seg_start.x - line_to_next_seg.ref_point.x);
+    double y_diff = (next_seg_start.y - line_to_next_seg.ref_point.y);
+    double dist = sqrt((x_diff*x_diff) + (y_diff*y_diff));
+    line_to_next_seg.seg_length = dist;
+    line_to_next_seg.max_speeds.linear.x = 0.5;
+    line_to_next_seg.accel_limit = 0.1;
+    line_to_next_seg.decel_limit = 0.1;
+    path_to_insert.push_back(line_to_next_seg);
+
+    //Do actual splice now
+    std::vector<precision_navigation_msgs::PathSegment>::iterator it;
+    it = path_.begin();
+    path_.insert(it+seg_number_+1, path_to_insert.begin(), path_to_insert.end());
+    seg_number_++;
+    seg_length_done_ = 0.0;
+    nav_msgs::Path viz_path;
+    makePathToVisualize(path_, viz_path);
+    path_visualizer_pub_.publish(viz_path);
+  }
+}
+
+//Get the start point of a segment
+geometry_msgs::Point getStartPoint(const precision_navigation_msgs::PathSegment& seg) {
+  geometry_msgs::Point start_point;
+  if (seg.seg_type == precision_navigation_msgs::PathSegment::ARC) {
+    double arc_ang_start = 0.0;
+    double tan_angle = tf::getYaw(seg.init_tan_angle);
+    if(seg.curvature >= 0.0) {
+      arc_ang_start = tan_angle - M_PI / 2.0;	
+    } else {
+      arc_ang_start = tan_angle + M_PI / 2.0;
+    }
+    start_point = seg.ref_point;
+    start_point.x += fabs(1./seg.curvature) * cos(arc_ang_start);
+    start_point.y += fabs(1./seg.curvature) * sin(arc_ang_start);
+  } else {
+    start_point = seg.ref_point;
+  }
+  return start_point;
+}
+
 void IdealStateGenerator::newPathCallback() {
   seg_number_ = 0;
   seg_length_done_ = 0.0;
+  boost::recursive_mutex::scoped_lock(path_lock_);
   path_ = as_.acceptNewGoal()->segments; 
   ROS_DEBUG("%s: New goal accepted", action_name_.c_str());
+  nav_msgs::Path viz_path;
+  makePathToVisualize(path_, viz_path);
+  path_visualizer_pub_.publish(viz_path);
 }
 
 void IdealStateGenerator::preemptPathCallback() {
@@ -377,11 +544,61 @@ void IdealStateGenerator::preemptPathCallback() {
   as_.setPreempted();
 }
 
+void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path visualization_path) {
+  uint8_t num_samples = 50;
+  visualization_path.poses.clear();
+  visualization_path.header.stamp = ros::Time::now();
+  visualization_path.header.frame_id = path.at(0).header.frame_id;
+  BOOST_FOREACH(precision_navigation_msgs::PathSegment seg, path) {
+    double dS = seg.seg_length / num_samples;
+    for (double seg_length_done = 0.0; seg_length_done <= seg.seg_length; seg_length_done += dS) {
+      double tan_angle = tf::getYaw(seg.init_tan_angle);
+      double rho, radius, arc_start, d_ang;
+      geometry_msgs::PoseStamped current_pose;
+      current_pose.pose.position = seg.ref_point;
+      switch(seg.seg_type) {
+        case precision_navigation_msgs::PathSegment::LINE:
+          current_pose.pose.position.x += seg_length_done * cos(tan_angle);
+          current_pose.pose.position.y += seg_length_done * sin(tan_angle);
+          current_pose.pose.orientation = tf::createQuaternionMsgFromYaw(tan_angle);
+          break;
+        case precision_navigation_msgs::PathSegment::ARC:
+          rho = seg.curvature;
+          radius = 1./fabs(rho); 
+          arc_start = 0.0;
+          if (rho >= 0.0) {
+            arc_start = tan_angle - M_PI/2.;
+          } else {
+            arc_start = tan_angle + M_PI/2.; 
+          }
+          d_ang = seg_length_done * rho;
+          current_pose.pose.position.x += radius*cos(arc_start+d_ang);
+          current_pose.pose.position.y += radius*sin(arc_start+d_ang);
+          current_pose.pose.orientation = tf::createQuaternionMsgFromYaw(tan_angle + d_ang);
+          break;
+        case precision_navigation_msgs::PathSegment::SPIN_IN_PLACE:
+          rho = seg.curvature;
+          radius = 1./fabs(rho); 
+          arc_start = 0.0;
+          if (rho >= 0.0) {
+            arc_start = tan_angle - M_PI/2.;
+          } else {
+            arc_start = tan_angle + M_PI/2.; 
+          }
+          d_ang = seg_length_done * rho;
+          current_pose.pose.orientation = tf::createQuaternionMsgFromYaw(tan_angle + d_ang);
+          break;
+      }
+      visualization_path.poses.push_back(current_pose);
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   ros::init(argc, argv, "ideal_state_generator");
   IdealStateGenerator idealState;
 
-  ros::MultiThreadedSpinner spinner(3);
+  ros::MultiThreadedSpinner spinner(4);
   spinner.spin();
   return 0;
 }
