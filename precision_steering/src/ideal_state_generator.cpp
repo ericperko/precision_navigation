@@ -174,8 +174,10 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
     } else {
       ROS_DEBUG("Collision detected. Commanding current position");
       if (use_splicing_) {
-        ROS_DEBUG("Setup a splicing timer");
-        splicing_timer_ = priv_nh_.createTimer(time_until_splice_, boost::bind(&IdealStateGenerator::splicePath, this, _1), true);
+        if (!splicing_timer_.isValid()) { //If we already have a valid timer, don't make another one
+          ROS_DEBUG("Setup a splicing timer");
+          splicing_timer_ = priv_nh_.createTimer(time_until_splice_, boost::bind(&IdealStateGenerator::splicePath, this, _1), true);
+        }
       }
       desiredState_ = makeHaltState(false); 
     }
