@@ -23,7 +23,7 @@ def makeDummyPaths():
 	p.ref_point.y = 2.18822
 	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(2.42426, (0,0,1))))
 	p.curvature = 0.0
-	p.seg_length = 2.3202
+	p.seg_length = 2.44679
 	p.max_speeds.linear.x = 0.5
 	p.accel_limit = 0.1
 	p.decel_limit = 0.1
@@ -31,9 +31,9 @@ def makeDummyPaths():
 
 	p = PathSegment()
 	p.header.frame_id = "map"
-	p.seg_type = PathSegment.ARC
-	p.ref_point.x = -1.6972
-	p.ref_point.y = 3.70692
+	p.seg_type = PathSegment.SPIN_IN_PLACE
+	p.ref_point.x = -1.79866
+	p.ref_point.y = 3.7957
 	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(2.42426, (0,0,1))))
 	p.curvature = -100.0
 	p.seg_length = 0.0157
@@ -45,11 +45,11 @@ def makeDummyPaths():
 	p = PathSegment()
 	p.header.frame_id = "map"
 	p.seg_type = PathSegment.LINE
-	p.ref_point.x = -1.7532
-	p.ref_point.y = 3.847
+	p.ref_point.x = -1.79866
+	p.ref_point.y = 3.7957
 	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(0.82720, (0,0,1))))
 	p.curvature = 0.0
-	p.seg_length = 13.0
+	p.seg_length = 13.0685442
 	p.max_speeds.linear.x = 0.5
 	p.accel_limit = 0.1
 	p.decel_limit = 0.1
