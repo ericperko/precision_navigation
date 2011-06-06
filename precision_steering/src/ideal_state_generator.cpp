@@ -405,9 +405,12 @@ bool IdealStateGenerator::computeState(precision_navigation_msgs::DesiredState& 
 void IdealStateGenerator::splicePath(const ros::TimerEvent& event) {
   boost::recursive_mutex::scoped_lock(path_lock_);
 
+  ROS_DEBUG("Starting splice. First checking if still in collision");
+
   //first make sure we are still in collision
   if (checkCollisions(false, desiredState_)) {
     std::vector<precision_navigation_msgs::PathSegment> path_to_insert;
+    ROS_DEBUG("Splicing detected still in collision. Splicing in a path");
 
     //Now to monkey with the path...
     precision_navigation_msgs::PathSegment current_segment = path_.at(seg_number_);
