@@ -120,7 +120,7 @@ IdealStateGenerator::IdealStateGenerator():
 
   //Setup the splicing timer
   splicing_timer_ = priv_nh_.createTimer(time_until_splice_, boost::bind(&IdealStateGenerator::splicePath, this, _1), true);
-  splicing_timer.stop(); //Don't want it to run immediately
+  splicing_timer_.stop(); //Don't want it to run immediately
 
   as_.registerGoalCallback(boost::bind(&IdealStateGenerator::newPathCallback, this));
   as_.registerPreemptCallback(boost::bind(&IdealStateGenerator::preemptPathCallback, this));
