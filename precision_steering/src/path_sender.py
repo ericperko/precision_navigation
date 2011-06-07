@@ -35,11 +35,12 @@ def makeDummyPaths():
 	p.ref_point.x = -1.79866
 	p.ref_point.y = 3.7957
 	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(2.42426, (0,0,1))))
-	p.curvature = -100.0
-	p.seg_length = 0.0157
-	p.max_speeds.linear.x = 0.005
-	p.accel_limit = 0.05
-	p.decel_limit = 0.05
+	p.curvature = -1.0
+	p.seg_length = 1.57
+	p.max_speeds.linear.x = 0.0
+        p.max_speeds.angular.z = 0.5
+	p.accel_limit = 0.1
+	p.decel_limit = 0.1
 	p1.segments.append(p)
 
 	p = PathSegment()
