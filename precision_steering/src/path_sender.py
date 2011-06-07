@@ -532,6 +532,19 @@ def makeDummyPaths():
         p10.segments.append(p)
         paths['straight_odom_test'] = p10
 
+        p11 = ExecutePathGoal()
+        p = PathSegment()
+	p.header.frame_id = "map"
+	p.seg_type = PathSegment.LINE
+	p.ref_point.x = 1.586
+	p.ref_point.y = 7.47589
+	p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(0.82720, (0,0,1))))
+	p.curvature = 0.0
+	p.seg_length = 8.0685442
+	p.max_speeds.linear.x = 0.5
+	p.accel_limit = 0.1
+	p.decel_limit = 0.1
+	p11.segments.append(p)
 	return paths
 
 class PathSender:
