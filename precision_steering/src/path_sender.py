@@ -545,6 +545,8 @@ def makeDummyPaths():
 	p.accel_limit = 0.1
 	p.decel_limit = 0.1
 	p11.segments.append(p)
+        paths['short_door_seg'] = p11
+
 	return paths
 
 class PathSender:
