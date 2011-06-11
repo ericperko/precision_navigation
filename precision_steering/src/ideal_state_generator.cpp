@@ -21,6 +21,8 @@ geometry_msgs::Point getStartPoint(const precision_navigation_msgs::PathSegment&
 
 void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegment>& path, nav_msgs::Path& visualization_path);
 
+void getDesiredState(const precision_navigation_msgs::PathSegment& seg, double seg_len, precision_navigation_msgs::DesiredState& output_desired_state);
+
 class IdealStateGenerator {
   public:
     IdealStateGenerator();
@@ -34,6 +36,7 @@ class IdealStateGenerator {
     void computeStateLoop(const ros::TimerEvent& event);
     void splicePath(const ros::TimerEvent& event);
     bool checkCollisions(bool checkEntireVolume, const precision_navigation_msgs::DesiredState& des_state);
+    bool checkCollisionsWithForwardSim(bool checkEntireVolume, const precision_navigation_msgs::PathSegment& seg,double seg_len_start, double seg_len_forward);
 
     //Loop rate in Hz
     double loop_rate_;
@@ -168,7 +171,13 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
       ROS_DEBUG("State computation failed. Command current position");
       new_desired_state = makeHaltState(false);
     }
-    if(!checkCollisions(false, new_desired_state)) {
+    bool collision_detected = false;
+    if (use_splicing_) {
+        collision_detected = checkCollisionsWithForwardSim(false, path_.at(seg_number_), seg_length_done_, 0.20);
+    } else {
+        collision_detected = checkCollisions(false, new_desired_state);
+    }
+    if(!collision_detected) {
       ROS_DEBUG("No collision detected. Passing on current desired state");
       desiredState_ = new_desired_state;
       if (use_splicing_) {
@@ -194,6 +203,26 @@ void IdealStateGenerator::computeStateLoop(const ros::TimerEvent& event) {
   des_pose.header = desiredState_.header;
   des_pose.pose = desiredState_.des_pose;
   ideal_pose_marker_pub_.publish(des_pose);
+}
+
+bool IdealStateGenerator::checkCollisionsWithForwardSim(bool checkEntireVolume, const precision_navigation_msgs::PathSegment& seg, double seg_len_start, double seg_len_forward) {
+  const double dS = 0.025;
+  precision_navigation_msgs::DesiredState state_to_check;
+  if (seg_len_forward <= 0.0) {
+    getDesiredState(seg, seg_len_start, state_to_check);
+    return checkCollisions(checkEntireVolume, state_to_check);
+  }
+  else {
+   bool collision_detected = false;
+   for (double seg_len_done = seg_len_start; seg_len_done <= (seg_len_start+seg_len_forward); seg_len_done += dS) {
+     getDesiredState(seg, seg_len_done, state_to_check);
+     collision_detected = checkCollisions(checkEntireVolume, state_to_check);
+     if (collision_detected) {
+        return collision_detected;
+     }
+   }
+   return collision_detected;
+  }
 }
 
 bool IdealStateGenerator::checkCollisions(bool checkEntireVolume, const precision_navigation_msgs::DesiredState& des_state) {
@@ -599,6 +628,52 @@ void makePathToVisualize(const std::vector<precision_navigation_msgs::PathSegmen
       visualization_path.poses.push_back(current_pose);
     }
   }
+}
+
+void getDesiredState(const precision_navigation_msgs::PathSegment& seg, double seg_length_done, precision_navigation_msgs::DesiredState& output_desired_state) {
+  double tan_angle = tf::getYaw(seg.init_tan_angle);
+  double rho, radius, arc_start, d_ang;
+  geometry_msgs::PoseStamped des_pose;
+  des_pose.pose.position = seg.ref_point;
+  switch(seg.seg_type) {
+    case precision_navigation_msgs::PathSegment::LINE:
+      des_pose.pose.position.x += seg_length_done * cos(tan_angle);
+      des_pose.pose.position.y += seg_length_done * sin(tan_angle);
+      des_pose.pose.orientation = tf::createQuaternionMsgFromYaw(tan_angle);
+      break;
+    case precision_navigation_msgs::PathSegment::ARC:
+      rho = seg.curvature;
+      radius = 1./fabs(rho); 
+      arc_start = 0.0;
+      if (rho >= 0.0) {
+        arc_start = tan_angle - M_PI/2.;
+      } else {
+        arc_start = tan_angle + M_PI/2.; 
+      }
+      d_ang = seg_length_done * rho;
+      des_pose.pose.position.x += radius*cos(arc_start+d_ang);
+      des_pose.pose.position.y += radius*sin(arc_start+d_ang);
+      des_pose.pose.orientation = tf::createQuaternionMsgFromYaw(tan_angle + d_ang);
+      break;
+    case precision_navigation_msgs::PathSegment::SPIN_IN_PLACE:
+      rho = seg.curvature;
+      radius = 1./fabs(rho); 
+      arc_start = 0.0;
+      if (rho >= 0.0) {
+        arc_start = tan_angle - M_PI/2.;
+      } else {
+        arc_start = tan_angle + M_PI/2.; 
+      }
+      d_ang = seg_length_done * rho;
+      des_pose.pose.orientation = tf::createQuaternionMsgFromYaw(tan_angle + d_ang);
+      break;
+  }
+
+  output_desired_state.header.frame_id = seg.header.frame_id;
+  output_desired_state.header.stamp = ros::Time::now();
+  output_desired_state.des_pose = des_pose.pose;
+  output_desired_state.seg_type = seg.seg_type;
+  output_desired_state.des_rho = seg.curvature;
 }
 
 int main(int argc, char *argv[]) {
