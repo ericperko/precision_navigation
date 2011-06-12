@@ -439,7 +439,8 @@ void IdealStateGenerator::splicePath(const ros::TimerEvent& event) {
   ROS_DEBUG("Starting splice. First checking if still in collision");
 
   //first make sure we are still in collision
-  if (checkCollisions(false, desiredState_)) {
+  bool collision_detected = checkCollisionsWithForwardSim(false, path_.at(seg_number_), seg_length_done_, 0.20);
+  if (collision_detected) {
     std::vector<precision_navigation_msgs::PathSegment> path_to_insert;
     ROS_DEBUG("Splicing detected still in collision. Splicing in a path");
 
