@@ -472,8 +472,8 @@ void IdealStateGenerator::splicePath(const ros::TimerEvent& event) {
     first_spin.decel_limit = 0.1;
     path_to_insert.push_back(first_spin);
 
-    //Our representative splice is an arc that is 180 degrees with a 2 foot radius
-    double arc_radius = 0.61; //61cm
+    //Our representative splice is an arc that is 180 degrees with a 1 meter radius
+    double arc_radius = 1.0; // 1 meter
     precision_navigation_msgs::PathSegment splice_arc;
     splice_arc.header.frame_id = current_segment.header.frame_id;
     splice_arc.seg_type = precision_navigation_msgs::PathSegment::ARC;
