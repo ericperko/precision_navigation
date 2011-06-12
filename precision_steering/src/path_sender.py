@@ -555,7 +555,7 @@ def makeDummyPaths():
         p.ref_point.y = 15.13
         p.init_tan_angle = Quaternion(*(tf_math.quaternion_about_axis(2.339,(0,0,1))))
         p.curvature = 0.0
-        p.seg_length = 3.5
+        p.seg_length = 4.35
         p.max_speeds.linear.x = 0.5
         p.accel_limit = 0.1
         p.decel_limit = 0.1
