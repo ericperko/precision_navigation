@@ -240,7 +240,7 @@ bool IdealStateGenerator::checkCollisions(bool checkEntireVolume, const precisio
         origin.pose.position.y += -0.3048;
         origin.pose.position.z += 0.0; */
       double width = 0.6096;
-      double length = 1.422;
+      double length = 1.0;
       double height = 2.00;
       tf::Stamped<tf::Pose > tf_origin;
       tf::poseStampedMsgToTF(origin_des_frame, tf_origin);
